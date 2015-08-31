@@ -4,7 +4,10 @@
     Public LAG_DIFF = (LONG_LAG - SHORT_LAG)
     Public STREAM_SEPARATION = 70
     Public QUALITY = 1009
-    Public randomArray(LONG_LAG) As Double
+    ' Arrays in VB.NET are defined from 0 to N, so it has N+1 elements.
+    ' In C, arrays are defined from 0 to N, so it has N elements. 
+    ' So, to be the same, we should declare array with 1 element less
+    Public randomArray(LONG_LAG - 1) As Double
     Public randomInited As Integer = 0
     Public randomArrayPointer1, randomArrayPointer2, iquality As Long
     Sub NUMrandomRestart(seed As Long)
@@ -19,8 +22,8 @@
         '	because the >> operator on negative integers adds a sign bit to the left.
         ' */
         Dim t, j As Long
-        Dim u(2 * LONG_LAG - 1) As Double
-        Dim ul(2 * LONG_LAG - 1) As Double
+        Dim u(2 * LONG_LAG - 2) As Double
+        Dim ul(2 * LONG_LAG - 2) As Double
         Dim ulp As Double = 1.0 / (1L << 30) / (1L << 22), ss
         '/* QUESTION: does this work if seed exceeds 2^32 - 3? See Knuth p. 187. */
         ss = 2.0 * ulp * (seed + 2)

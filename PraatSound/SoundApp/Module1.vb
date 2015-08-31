@@ -2,6 +2,35 @@
     Function RealTier_getArea(ByVal mme As DurationTier, ByVal tmin As Double, ByVal tmax As Double) As Double
         Return 0
     End Function
+
+    Function RealTier_getValueAtTime(ByVal mme As RealTier, ByVal t As Double) As Double
+        Return 0
+    End Function
+
+    Sub copyFall(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
+    End Sub
+
+    Sub copyRise (ByVal mme As Sound, ByVal tmin As Double,  ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
+    End Sub
+
+    Sub copyBell(ByVal mme As Sound, ByVal tmid As Double, ByVal leftWidth As Double, ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double)
+        copyRise(mme, tmid - leftWidth, tmid, thee, tmidTarget)
+        copyFall(mme, tmid, tmid + rightWidth, thee, tmidTarget)
+    End Sub
+
+    Sub copyBell2(ByVal mme As Sound, ByVal source As PointProcess, ByVal isource As Double, ByVal leftWidth As Double,
+                   ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double, ByVal maxT As Double)
+    End Sub
+
+    Function PointProcess_getNearestIndex(ByVal mme As PointProcess, ByVal t As Double) As Long
+        Return 0
+    End Function
+
+    Function Sampled_xToLowIndex (ByVal mme As Sampled ,ByVal x As Double) As Long
+        Return 0
+    End Function
+
+
     Function Sound_Point_Pitch_Duration_to_Sound(ByRef mme As Sound, ByVal pulses As PointProcess, ByVal pitch As PitchTier, ByVal duration As DurationTier, ByVal maxT As Double) As Sound
         Try
             Dim ipointleft, ipointright As Long
@@ -24,7 +53,7 @@
             '/*
             ' * Create a Sound long enough to hold the longest possible duration-manipulated sound.
             ' */
-            autoSound thee = Sound_create(1, mme, xmin, mme.xmin + 3 * (mme.xmax - mme.xmin), 3 * mme.nx, mme.dx, mme.x1)
+            Dim thee As New Sound(1, mme, xmin, mme.xmin + 3 * (mme.xmax - mme.xmin), 3 * mme.nx, mme.dx, mme.x1)
 
             '/*
             ' * Below, I'll abbreviate the voiced interval as "voice" and the voiceless interval as "noise".
@@ -70,7 +99,7 @@
                         Next
 
                         tsource = 0.5 * (tleft + tright)
-                        copyBell(mme, tsource, voicelessPeriod, voicelessPeriod, thee.peek(), ttarget)
+                        copyBell(mme, tsource, voicelessPeriod, voicelessPeriod, thee, ttarget)
                         voicelessPeriod = NUMrandomUniform(0.008, 0.012)
                         ttarget += voicelessPeriod
                     End While
@@ -124,7 +153,7 @@ endoffor:
                         tsource = 0.5 * (tleft + tright)
                         period = 1.0 / RealTier_getValueAtTime(pitch, tsource)
                         isourcepulse = PointProcess_getNearestIndex(pulses, tsource)
-                        copyBell2(mme, pulses, isourcepulse, period, period, thee.peek(), ttarget, maxT)
+                        copyBell2(mme, pulses, isourcepulse, period, period, thee, ttarget, maxT)
                         ttarget += period
                     End While
                     deltat += durationOfTargetVoice - durationOfSourceVoice
@@ -157,7 +186,7 @@ endoffor:
                 Next
 
                 tsource = 0.5 * (tleft + tright)
-                copyBell(mme, tsource, voicelessPeriod, voicelessPeriod, thee.peek(), ttarget)
+                copyBell(mme, tsource, voicelessPeriod, voicelessPeriod, thee, ttarget)
                 voicelessPeriod = NUMrandomUniform(0.008, 0.012)
                 ttarget += voicelessPeriod
             End While
@@ -170,12 +199,12 @@ endoffor:
             If (Math.Abs(thee.xmax - mme.xmax) < 0.000000000001) Then
                 thee.xmax = mme.xmax
             End If
-            thee.nx = Sampled_xToLowIndex(thee.peek(), thee.xmax)
+            thee.nx = Sampled_xToLowIndex(thee, thee.xmax)
             If (thee.nx > 3 * mme.nx) Then
                 thee.nx = 3 * mme.nx
             End If
 
-            Return thee.transfer()
+            Return thee
         Catch 'MelderError
             'Melder_throw (mme, ": not manipulated.");
         End Try
