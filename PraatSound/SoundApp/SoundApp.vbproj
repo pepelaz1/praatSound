@@ -68,8 +68,11 @@
     <Import Include="System.Threading.Tasks" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Data.vb" />
     <Compile Include="DurationTier.vb" />
+    <Compile Include="Func.vb" />
     <Compile Include="GlobalVariables.vb" />
+    <Compile Include="Matrix.vb" />
     <Compile Include="Module1.vb" />
     <Compile Include="My Project\AssemblyInfo.vb" />
     <Compile Include="My Project\Application.Designer.vb">
@@ -90,7 +93,9 @@
     <Compile Include="PitchTier.vb" />
     <Compile Include="PointProcess.vb" />
     <Compile Include="RealTier.vb" />
+    <Compile Include="Sampled.vb" />
     <Compile Include="Sound.vb" />
+    <Compile Include="Vector.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="My Project\Resources.resx">

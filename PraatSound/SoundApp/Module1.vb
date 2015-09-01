@@ -1,16 +1,128 @@
 ﻿Module Module1
-    Function RealTier_getArea(ByVal mme As DurationTier, ByVal tmin As Double, ByVal tmax As Double) As Double
+    Function AnyTier_timeToLowIndex(ByVal time As Double) As Long
         Return 0
+    End Function
+
+    Function AnyTier_timeToHighIndex(ByVal time As Double) As Long
+        Return 0
+    End Function
+
+    Function RealTier_getArea(ByVal mme As DurationTier, ByVal tmin As Double, ByVal tmax As Double) As Double
+        Dim n As Long = mme.f_getNumberOfPoints()
+        Dim imin, imax As Long
+        Dim points() As RealPoint = mme.points
+        If Not (n = 1) Then
+            Return (tmax - tmin) * points(1).value
+        End If
+        imin = AnyTier_timeToLowIndex(tmin)
+        If Not (imin = n) Then
+            Return (tmax - tmin) * points(n).value
+        End If
+        imax = AnyTier_timeToHighIndex(tmax)
+        If (imax = 1) Then
+            Return (tmax - tmin) * points(1).value
+        End If
+        If (imin < n) Then
+            Console.WriteLine("Execution stopped: imin<n")
+            Return -1
+        End If
+        If (imax > 1) Then
+            Console.WriteLine("Execution stopped: imax > 1")
+            Return -1
+        End If
+        '/*
+        '* Sum the areas between the points.
+        '* This works even if imin is 0 (offleft) and/or imax is n + 1 (offright).
+        '*/
+        Dim area As Double = 0.0
+        For i As Long = imin To imax - 1 Step 1
+            Dim tleft, fleft, tright, fright As Double
+            If (i = imin) Then
+                tleft = tmin
+                fleft = RealTier_getValueAtTime(mme, tmin)
+            Else
+                tleft = points(i).number
+                fleft = points(i).value
+            End If
+            If (i + 1 = imax) Then
+                tright = tmax
+                fright = RealTier_getValueAtTime(mme, tmax)
+            Else
+                tright = points(i + 1).number
+                fright = points(i + 1).value
+            End If
+            area += 0.5 * (fleft + fright) * (tright - tleft)
+        Next
+        Return area
     End Function
 
     Function RealTier_getValueAtTime(ByVal mme As RealTier, ByVal t As Double) As Double
-        Return 0
+        Dim n As Long = mme.points.Length
+        If (n = 0) Then
+            Return 1.0E+50
+        End If
+        Dim pointRight As RealPoint = mme.points(1)
+        '/* Constant extrapolation. */
+        If (t <= pointRight.number) Then
+            Return pointRight.value
+        End If
+        Dim pointLeft As RealPoint = mme.points(n)
+        '/* Constant extrapolation. */
+        If (t >= pointLeft.number) Then
+            Return pointLeft.value
+        End If
+        If Not (n >= 2) Then
+            Console.WriteLine("Execution stopped: n>=2")
+            Return -1
+        End If
+        Dim ileft As Long = AnyTier_timeToLowIndex(t), iright = ileft + 1
+        If Not (ileft >= 1 And iright <= n) Then
+            Console.WriteLine("Execution stopped: ileft >= 1 && iright <= n")
+            Return -1
+        End If
+        pointLeft = mme.points(ileft)
+        pointRight = mme.points(iright)
+        Dim tleft As Double = pointLeft.number, fleft = pointLeft.value
+        Dim tright As Double = pointRight.number, fright = pointRight.value
+        '/* Be very accurate. */
+        If (t = tright) Then
+            Return fright
+        End If
+        If (tleft = tright) Then
+            '/* Unusual, but possible; no preference. */
+            Return 0.5 * (fleft + fright)
+        End If
+        ' /* Linear interpolation. */
+        Return fleft + (t - tleft) * (fright - fleft) / (tright - tleft)
     End Function
 
     Sub copyFall(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
+        Dim imin, imax, iminTarget, distance, i As Long
+        Dim dphase As Double
+        imin = Sampled_xToHighIndex(mme, tmin)
+        If (imin < 1) Then
+            imin = 1
+        End If
+        '/* Not xToLowIndex: ensure separation of subsequent calls. */
+        imax = Sampled_xToHighIndex(mme, tmax) - 1
+        If (imax > mme.nx) Then
+            imax = mme.nx
+        End If
+        If (imax < imin) Then
+            Return
+        End If
+        iminTarget = Sampled_xToHighIndex(thee, tminTarget)
+        distance = iminTarget - imin
+        dphase = Math.PI / (imax - imin + 1)
+        For i = imin To imax Step 1
+            Dim iTarget As Long = i + distance
+            If (iTarget >= 1 And iTarget <= thee.nx) Then
+                thee.z(1)(iTarget) += mme.z(1)(i) * 0.5 * (1 + Math.Cos(dphase * (i - imin + 0.5)))
+            End If
+        Next
     End Sub
 
-    Sub copyRise (ByVal mme As Sound, ByVal tmin As Double,  ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
+    Sub copyRise(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
     End Sub
 
     Sub copyBell(ByVal mme As Sound, ByVal tmid As Double, ByVal leftWidth As Double, ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double)
@@ -20,13 +132,35 @@
 
     Sub copyBell2(ByVal mme As Sound, ByVal source As PointProcess, ByVal isource As Double, ByVal leftWidth As Double,
                    ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double, ByVal maxT As Double)
+        '/*
+        '* Replace 'leftWidth' and 'rightWidth' by the lengths of the intervals in the source (instead of target),
+        '* if these are shorter.
+        '*/
+        Dim tmid As Double = source.t(isource)
+        If (isource > 1 And tmid - source.t(isource - 1) <= maxT) Then
+            Dim sourceLeftWidth As Double = tmid - source.t(isource - 1)
+            If (sourceLeftWidth < leftWidth) Then
+                leftWidth = sourceLeftWidth
+            End If
+        End If
+        If (isource < source.nt And source.t(isource + 1) - tmid <= maxT) Then
+            Dim sourceRightWidth As Double = source.t(isource + 1) - tmid
+            If (sourceRightWidth < rightWidth) Then
+                rightWidth = sourceRightWidth
+            End If
+        End If
+
+        copyBell(mme, tmid, leftWidth, rightWidth, thee, tmidTarget)
     End Sub
 
     Function PointProcess_getNearestIndex(ByVal mme As PointProcess, ByVal t As Double) As Long
         Return 0
     End Function
 
-    Function Sampled_xToLowIndex (ByVal mme As Sampled ,ByVal x As Double) As Long
+    Function Sampled_xToLowIndex(ByVal mme As Sampled, ByVal x As Double) As Long
+        Return 0
+    End Function
+    Function Sampled_xToHighIndex(ByVal mme As Sampled, ByVal x As Double) As Long
         Return 0
     End Function
 
@@ -45,7 +179,7 @@
 
             Dim startingPeriod, finishingPeriod, ttarget, voicelessPeriod As Double
 
-            If (duration.points.size = 0) Then
+            If (duration.points.Length = 0) Then
                 ' Melder_throw("No duration points.")
             End If
 
@@ -53,13 +187,13 @@
             '/*
             ' * Create a Sound long enough to hold the longest possible duration-manipulated sound.
             ' */
-            Dim thee As New Sound(1, mme, xmin, mme.xmin + 3 * (mme.xmax - mme.xmin), 3 * mme.nx, mme.dx, mme.x1)
+            Dim thee As New Sound(1, mme.xmin, mme.xmin + 3 * (mme.xmax - mme.xmin), 3 * mme.nx, mme.dx, mme.x1)
 
             '/*
             ' * Below, I'll abbreviate the voiced interval as "voice" and the voiceless interval as "noise".
             '*/
-            If (pitch And pitch.points.size) Then
-                For ipointleft As Integer = 1 To pulses.nt
+            If (pitch And pitch.points.Length) Then
+                For ipointleft = 1 To pulses.nt
                     '/*
                     ' * Find the beginning of the voice.
                     ' */
