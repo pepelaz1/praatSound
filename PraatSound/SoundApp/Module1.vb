@@ -1,10 +1,118 @@
 ﻿Module Module1
-    Function AnyTier_timeToLowIndex(ByVal time As Double) As Long
-        Return 0
+    Function AnyTier_timeToLowIndex(ByVal mme As RealTier, ByVal time As Double) As Long
+        '// undefined
+        If (mme.points.Length = 0) Then
+            Return 0
+        End If
+        Dim ileft As Long = 1, iright = mme.points.Length
+        Dim points() As RealPoint = mme.points
+        Dim tleft As Double = points(ileft).number
+        '// offleft
+        If (time < tleft) Then
+            Return 0
+        End If
+        Dim tright As Double = points(iright).number
+        If (time >= tright) Then
+            Return iright
+        End If
+        If Not (time >= tleft And time < tright) Then
+            Console.WriteLine("Execution stopped: time >= tleft && time < tright")
+            Return -1
+        End If
+        If Not (iright > ileft) Then
+            Console.WriteLine("Execution stopped: iright > ileft")
+            Return -1
+        End If
+        While (iright > ileft + 1)
+            Dim imid As Long = Convert.ToInt64((ileft + iright) / 2)
+            Dim tmid As Double = points(imid).number
+            If (time < tmid) Then
+                iright = imid
+                tright = tmid
+            Else
+                ileft = imid
+                tleft = tmid
+            End If
+        End While
+        If Not (iright = ileft + 1) Then
+            Console.WriteLine("Execution stopped: iright == ileft + 1")
+            Return -1
+        End If
+        If Not (ileft >= 1) Then
+            Console.WriteLine("Execution stopped: ileft >= 1")
+            Return -1
+        End If
+        If Not (iright <= mme.points.Length) Then
+            Console.WriteLine("Execution stopped: (iright <= mme.points.Length)")
+            Return -1
+        End If
+        If Not (time >= points(ileft).number) Then
+            Console.WriteLine("Execution stopped: (time >= points(ileft).number)")
+            Return -1
+        End If
+        If Not (time <= points(iright).number) Then
+            Console.WriteLine("Execution stopped: (time <= points(iright).number)")
+            Return -1
+        End If
+        Return ileft
     End Function
 
-    Function AnyTier_timeToHighIndex(ByVal time As Double) As Long
-        Return 0
+    Function AnyTier_timeToHighIndex(ByVal mme As RealTier, ByVal time As Double) As Long
+        '// undefined
+        If (mme.points.Length = 0) Then
+            Return 0
+        End If
+        Dim ileft As Long = 1, iright = mme.points.Length
+        Dim points() As RealPoint = mme.points
+        Dim tleft As Double = points(ileft).number
+        If (time <= tleft) Then
+            Return 1
+        End If
+        Dim tright As Double = points(iright).number
+        ' // offright
+        If (time > tright) Then
+            Return iright + 1
+        End If
+        If Not (time > tleft And time <= tright) Then
+            Console.WriteLine("Execution stopped:time > tleft And time <= tright")
+            Return -1
+        End If
+        If Not (iright > ileft) Then
+            Console.WriteLine("Execution stopped: iright > ileft")
+            Return -1
+        End If
+        While (iright > ileft + 1)
+            Dim imid As Long = Convert.ToInt64((ileft + iright) / 2)
+            Dim tmid As Double = points(imid).number
+            If (time <= tmid) Then
+                iright = imid
+                tright = tmid
+            Else
+                ileft = imid
+                tleft = tmid
+            End If
+        End While
+        If Not (iright = ileft + 1) Then
+            Console.WriteLine("Execution stopped: iright == ileft + 1")
+            Return -1
+        End If
+        If Not (ileft >= 1) Then
+            Console.WriteLine("Execution stopped: ileft >= 1")
+            Return -1
+        End If
+        If Not (iright <= mme.points.Length) Then
+            Console.WriteLine("Execution stopped: (iright <= mme.points.Length)")
+            Return -1
+        End If
+        If Not (time >= points(ileft).number) Then
+            Console.WriteLine("Execution stopped: (time >= points(ileft).number)")
+            Return -1
+        End If
+        If Not (time <= points(iright).number) Then
+            Console.WriteLine("Execution stopped: (time <= points(iright).number)")
+            Return -1
+        End If
+        Return iright
     End Function
 
     Function RealTier_getArea(ByVal mme As DurationTier, ByVal tmin As Double, ByVal tmax As Double) As Double
@@ -14,11 +122,11 @@
         If Not (n = 1) Then
             Return (tmax - tmin) * points(1).value
         End If
-        imin = AnyTier_timeToLowIndex(tmin)
+        imin = AnyTier_timeToLowIndex(mme, tmin)
         If Not (imin = n) Then
             Return (tmax - tmin) * points(n).value
         End If
-        imax = AnyTier_timeToHighIndex(tmax)
+        imax = AnyTier_timeToHighIndex(mme, tmax)
         If (imax = 1) Then
             Return (tmax - tmin) * points(1).value
         End If
@@ -75,7 +183,7 @@
             Console.WriteLine("Execution stopped: n>=2")
             Return -1
         End If
-        Dim ileft As Long = AnyTier_timeToLowIndex(t), iright = ileft + 1
+        Dim ileft As Long = AnyTier_timeToLowIndex(mme, t), iright = ileft + 1
         If Not (ileft >= 1 And iright <= n) Then
             Console.WriteLine("Execution stopped: ileft >= 1 && iright <= n")
             Return -1
@@ -122,7 +230,30 @@
         Next
     End Sub
 
-    Sub copyRise(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
+    Sub copyRise(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tmaxTarget As Double)
+        Dim imin, imax, imaxTarget, distance, i As Long
+        Dim dphase As Double
+        imin = Sampled_xToHighIndex(mme, tmin)
+        If (imin < 1) Then
+            imin = 1
+        End If
+        '/* Not xToLowIndex: ensure separation of subsequent calls. */
+        imax = Sampled_xToHighIndex(mme, tmax) - 1
+        If (imax > mme.nx) Then
+            imax = mme.nx
+        End If
+        If (imax < imin) Then
+            Return
+        End If
+        imaxTarget = Sampled_xToHighIndex(thee, tmaxTarget) - 1
+        distance = imaxTarget - imax
+        dphase = Math.PI / (imax - imin + 1)
+        For i = imin To imax Step 1
+            Dim iTarget As Long = i + distance
+            If (iTarget >= 1 And iTarget <= thee.nx) Then
+                thee.z(1)(iTarget) += mme.z(1)(i) * 0.5 * (1 - Math.Cos(dphase * (i - imin + 0.5)))
+            End If
+        Next
     End Sub
 
     Sub copyBell(ByVal mme As Sound, ByVal tmid As Double, ByVal leftWidth As Double, ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double)
@@ -154,16 +285,42 @@
     End Sub
 
     Function PointProcess_getNearestIndex(ByVal mme As PointProcess, ByVal t As Double) As Long
-        Return 0
+        If (mme.nt = 0) Then
+            Return 0
+        End If
+        If (t <= mme.t(1)) Then
+            Return 1
+        End If
+        If (t >= mme.t(mme.nt)) Then
+            Return mme.nt
+        End If
+
+        '/* Start binary search. */
+        Dim left As Long = 1, right = mme.nt
+        While (left < right - 1)
+            Dim mid As Long = (left + right) / 2
+            If (t >= mme.t(mid)) Then
+                left = mid
+            Else
+                right = mid
+            End If
+        End While
+        If Not (right = left + 1) Then
+            Console.WriteLine("Cannot continue: right == left + 1")
+        End If
+        If (t - mme.t(left) < mme.t(right) - t) Then
+            Return left
+        Else
+            Return right
+        End If
     End Function
 
     Function Sampled_xToLowIndex(ByVal mme As Sampled, ByVal x As Double) As Long
-        Return 0
+        Return Convert.ToInt64(Math.Floor((x - mme.x1) / mme.dx) + 1)
     End Function
     Function Sampled_xToHighIndex(ByVal mme As Sampled, ByVal x As Double) As Long
-        Return 0
+        Return Convert.ToInt64(Math.Ceiling((x - mme.x1) / mme.dx) + 1)
     End Function
-
 
     Function Sound_Point_Pitch_Duration_to_Sound(ByRef mme As Sound, ByVal pulses As PointProcess, ByVal pitch As PitchTier, ByVal duration As DurationTier, ByVal maxT As Double) As Sound
         Try
@@ -192,7 +349,7 @@
             '/*
             ' * Below, I'll abbreviate the voiced interval as "voice" and the voiceless interval as "noise".
             '*/
-            If (pitch And pitch.points.Length) Then
+            If (Not (pitch Is Nothing) AndAlso pitch.points.Length > 0) Then
                 For ipointleft = 1 To pulses.nt
                     '/*
                     ' * Find the beginning of the voice.
