@@ -68,6 +68,8 @@
     <Import Include="System.Threading.Tasks" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AnyPoint.vb" />
+    <Compile Include="AnyTier.vb" />
     <Compile Include="Data.vb" />
     <Compile Include="DurationTier.vb" />
     <Compile Include="Func.vb" />

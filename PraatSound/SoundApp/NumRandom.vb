@@ -88,7 +88,7 @@
                 t = t - 1
             End If
         End While
-            For j = 0 To SHORT_LAG
+        For j = 0 To SHORT_LAG
             randomArray(j + LAG_DIFF) = u(j)
         Next
         For j = j To LONG_LAG - 1 Step 1
@@ -126,8 +126,9 @@
         randomArray(p1) = newValue
         p1 += 1
         p2 += 1
-        If (++iquality = LONG_LAG) Then
-            For iquality = iquality To QUALITY - 1 Step 1
+        iquality = iquality + 1
+        If (iquality = LONG_LAG) Then
+            For Index As Long = iquality To QUALITY - 1 Step 1
                 Dim newValue2 As Double
                 '/*
                 '	Possible future minor speed improvement:
