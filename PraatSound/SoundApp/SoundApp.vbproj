@@ -92,6 +92,7 @@
     <Compile Include="NumRandom.vb" />
     <Compile Include="PitchTier.vb" />
     <Compile Include="PointProcess.vb" />
+    <Compile Include="RealPoint.vb" />
     <Compile Include="RealTier.vb" />
     <Compile Include="Sampled.vb" />
     <Compile Include="Sound.vb" />
