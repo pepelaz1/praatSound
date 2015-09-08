@@ -30,8 +30,9 @@
 
     Public Melder_debug As Long = 0
 
-    Private Declare Function GetAddrOf Lib "KERNEL32" Alias "MulDiv" (nNumber As Integer, Optional ByVal nNumerator As Integer = 1, Optional ByVal nDenominator As Integer = 1) As UIntPtr
-    Private Declare Sub MoveMemory Lib "KERNEL32" Alias "RtlMoveMemory" (hpvDest As UIntPtr, hpvSource As UIntPtr, ByVal cbCopy As Integer)
+    'Private Declare Function GetAddrOf Lib "KERNEL32" Alias "MulDiv" (nNumber As Integer, Optional ByVal nNumerator As Integer = 1, Optional ByVal nDenominator As Integer = 1) As Long
+    Declare Function GetAddrOf Lib "msvbvm50.dll" Alias "VarPtr" (ByVal Var As Integer) As Long
+    Private Declare Sub MoveMemory Lib "KERNEL32" Alias "RtlMoveMemory" (hpvDest As Long, hpvSource As Long, ByVal cbCopy As Integer)
     Function AnyTier_timeToLowIndex(ByVal mme As RealTier, ByVal time As Double) As Long
         '// undefined
         If (mme.points.Length = 0) Then
@@ -574,54 +575,109 @@ endofswitch:
             ' // 32 or 64 bits
         End If
     End Function
+    Public Function PutSign(ByVal number As UShort) As Short
+        If number > 32768 Then 'negative number
+            Return (65536 - number) * -1
+        Else
+            Return number
+        End If
+    End Function
     Sub Melder_readAudioToFloat(ByRef reader As System.IO.BinaryReader, ByVal numberOfChannels As Integer, ByVal encoding As Integer, ByRef buffer(,) As Double, ByVal numberOfSamples As Long)
-        Select Case encoding
-            Case Melder_LINEAR_16_LITTLE_ENDIAN
-                Dim numberOfBytesPerSamplePerChannel As Integer = 2
-                '(int) sizeof (double) = 8
-                If (numberOfChannels > 8 / numberOfBytesPerSamplePerChannel) Then
-                    For isamp As Long = 1 To numberOfSamples Step 1
-                        For ichan As Long = 1 To numberOfChannels Step 1
-                            buffer(ichan, isamp) = bingeti2LE(reader) * (1.0 / 32768)
-                        Next
-                    Next
-                Else
-                    Dim numberOfBytes As Long = numberOfChannels * numberOfSamples * numberOfBytesPerSamplePerChannel
-                    Dim bytes() As Byte = reader.ReadBytes(numberOfBytes)
-                    ' Write bytes to buffer at specific address
-                    Dim dstAddr As UIntPtr = GetAddrOf(buffer(numberOfChannels, numberOfSamples)) + 8 - numberOfBytes
-                    Dim srcAddr As UIntPtr = GetAddrOf(bytes(0))
-                    MoveMemory(dstAddr, srcAddr, numberOfBytes)
-                    'If (fread(bytes, 1, numberOfBytes, f) < numberOfBytes) Then
-                    'Console.WriteLine("Error in ReadAudioToFloat")
-                    'Return
-                    'End If
-                    '// read 16-bit data into last quarter of buffer
-                    Dim i As Long = 0
-                    If (numberOfChannels = 1) Then
-                        For isamp As Long = 1 To numberOfSamples Step 1
-                            Dim byte1 As Byte = bytes(i)
-                            i = i + 1
-                            Dim byte2 = bytes(i)
-                            i = i + 1
-                            Dim value As Long = Convert.ToInt16(((Convert.ToUInt16(byte2) << 8) Or Convert.ToUInt16(byte1)))
-                            buffer(1, isamp) = value * (1.0 / 32768)
-                        Next
-                    Else
+        Dim j As Long = 1
+        Try
+            Select Case encoding
+                Case Melder_LINEAR_16_LITTLE_ENDIAN
+                    Dim numberOfBytesPerSamplePerChannel As Integer = 2
+                    '(int) sizeof (double) = 8
+                    If (numberOfChannels > 8 / numberOfBytesPerSamplePerChannel) Then
                         For isamp As Long = 1 To numberOfSamples Step 1
                             For ichan As Long = 1 To numberOfChannels Step 1
+                                buffer(ichan, isamp) = bingeti2LE(reader) * (1.0 / 32768)
+                            Next
+                        Next
+                    Else
+                        Dim numberOfBytes As Long = numberOfChannels * numberOfSamples * numberOfBytesPerSamplePerChannel
+                        Dim bytes() As Byte = reader.ReadBytes(numberOfBytes)
+                        '  For i As Integer = 0 To numberOfBytes - 1 Step 1
+
+                        '   Next
+                        '  buffer(0, ) = reader.ReadBytes(numberOfBytes)
+                        ' Write bytes to buffer at specific address
+                        ' last quarter of buffer
+                        Dim bufStartIndex = Math.Floor(numberOfSamples * 0.75)
+                        'number of bytes to be replaced in buffer
+                        Dim N As Long = 8 - (((numberOfSamples * 3) Mod 4) * 2)
+                        'save double value
+                        Dim d As Double = buffer(0, bufStartIndex)
+                        ' clear N bytes
+                        If (N <> 0) Then
+                            'Make needed bytes as 0
+                            Dim mult As Double
+                            If N = 2 Then
+                                mult = &HFFFFFFFFFFFF0000
+                            ElseIf N = 4 Then
+                                mult = &HFFFFFFFF00000000
+                            ElseIf N = 6 Then
+                                mult = &HFFFF000000000000
+                            End If
+                            d = d And mult
+                            For counter As Long = 0 To N - 1 Step 1
+                                d = d Or (bytes(N - 1 - counter) << (8 * counter))
+                            Next
+                            'put it to buffer
+                            buffer(0, bufStartIndex) = d
+                        End If
+                        Dim bytesV(numberOfBytes - N) As Byte
+                        For ind As Integer = N To numberOfBytes - 1 Step 1
+                            bytesV(ind - N) = bytes(ind)
+                        Next
+                        Dim ms As System.IO.MemoryStream = New System.IO.MemoryStream(bytesV)
+                        Dim br As System.IO.BinaryReader = New IO.BinaryReader(ms)
+                        Dim curDouble As Double
+                        While j < numberOfSamples - bufStartIndex
+                            curDouble = br.ReadDouble()
+                            buffer(0, bufStartIndex + j) = curDouble
+                            j = j + 1
+                        End While
+                        'Dim tmpAddr As Long = GetAddrOf(buffer(0, 0))
+                        'Dim tmpAddr1 As Long = GetAddrOf(buffer(numberOfChannels - 1, numberOfSamples - 1))
+                        'Dim dstAddr As Long = tmpAddr + 8 - numberOfBytes
+                        'Dim srcAddr As Long = GetAddrOf(bytes(0))
+                        'MoveMemory(dstAddr, srcAddr, numberOfBytes)
+                        'If (fread(bytes, 1, numberOfBytes, f) < numberOfBytes) Then
+                        'Console.WriteLine("Error in ReadAudioToFloat")
+                        'Return
+                        'End If
+                        '// read 16-bit data into last quarter of buffer
+                        Dim i As Long = 0
+                        If (numberOfChannels = 1) Then
+                            For isamp As Long = 0 To numberOfSamples - 1 Step 1
                                 Dim byte1 As Byte = bytes(i)
                                 i = i + 1
                                 Dim byte2 = bytes(i)
                                 i = i + 1
-                                Dim value As Long = Convert.ToInt16((Convert.ToUInt16(byte2) << 8) Or Convert.ToUInt16(byte1))
-                                buffer(ichan, isamp) = value * (1.0 / 32768)
+                                Dim value As Short = PutSign(((Convert.ToUInt16(byte2) << 8) Or Convert.ToUInt16(byte1)))
+                                buffer(0, isamp) = value * (1.0 / 32768)
                             Next
-                        Next
-                    End If
-                End If
-        End Select
-
+                        Else
+                            For isamp As Long = 1 To numberOfSamples Step 1
+                                For ichan As Long = 1 To numberOfChannels Step 1
+                                    Dim byte1 As Byte = bytes(i)
+                                    i = i + 1
+                                    Dim byte2 = bytes(i)
+                                    i = i + 1
+                                    Dim b2 As UShort = Convert.ToUInt16(byte2)
+                                    Dim b1 As UShort = Convert.ToUInt16(byte1)
+                                    Dim value As Long = Convert.ToInt16((b2 << 8) Or b1)
+                                    buffer(ichan, isamp) = value * (1.0 / 32768)
+                                Next
+                            Next
+                        End If
+                        End If
+            End Select
+        Catch ex As Exception
+            Console.WriteLine(ex.Message)
+        End Try
     End Sub
     Sub Melder_checkWavFile(ByRef reader As System.IO.BinaryReader, ByRef numberOfChannels As Integer, ByRef encoding As Integer, ByRef sampleRate As Double, ByRef startOfData As Long, ByRef numberOfSamples As Long)
         Dim data(7), chunkID(3) As Byte
@@ -797,7 +853,8 @@ endoffor: If (Not formatChunkPresent) Then
             Console.WriteLine("Cannot continue execution: numberOfBitsPerSamplePoint <> -1 And dataChunkSize <> -1")
             Return
         End If
-        numberOfSamples = dataChunkSize / numberOfChannels / ((numberOfBitsPerSamplePoint + 7) / 8)
+        Dim d As Long = Math.Floor((numberOfBitsPerSamplePoint + 7) / 8)
+        numberOfSamples = dataChunkSize / numberOfChannels / d
     End Sub
 
     Function MelderFile_checkSoundFile(ByRef reader As System.IO.BinaryReader, ByRef numberOfChannels As Integer, ByRef encoding As Integer, ByRef sampleRate As Double, ByRef startOfData As Long, ByRef numberOfSamples As Long) As Integer
