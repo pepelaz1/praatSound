@@ -92,7 +92,10 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <Compile Include="NumRandom.vb" />
+    <Compile Include="Pitch.vb" />
+    <Compile Include="PitchCandidate.vb" />
     <Compile Include="PitchTier.vb" />
+    <Compile Include="Pitch_Frame.vb" />
     <Compile Include="PointProcess.vb" />
     <Compile Include="RealPoint.vb" />
     <Compile Include="RealTier.vb" />

@@ -918,8 +918,69 @@ endoffor: If (Not formatChunkPresent) Then
         End Try
     End Function
 
+    Function Sound_to_Pitch_any(ByRef mme As Sound,
+    ByVal dt As Double, ByVal minimumPitch As Double, ByVal periodsPerWindow As Double, ByVal maxnCandidates As Integer,
+    ByVal method As Integer,
+    ByVal silenceThreshold As Double, ByVal voicingThreshold As Double,
+    ByVal octaveCost As Double, ByVal octaveJumpCost As Double, ByVal voicedUnvoicedCost As Double, ByVal ceiling As Double) As Pitch
+        'TODO
+        Return Nothing
+    End Function
+
+    Function Sound_to_Pitch_ac(ByRef mme As Sound,
+    ByVal dt As Double, ByVal minimumPitch As Double, ByVal periodsPerWindow As Double, ByVal maxnCandidates As Integer, ByVal accurate As Integer,
+    ByVal silenceThreshold As Double, ByVal voicingThreshold As Double,
+    ByVal octaveCost As Double, ByVal octaveJumpCost As Double, ByVal voicedUnvoicedCost As Double, ByVal ceiling As Double) As Pitch
+
+        Return Sound_to_Pitch_any(mme, dt, minimumPitch, periodsPerWindow, maxnCandidates, accurate,
+            silenceThreshold, voicingThreshold, octaveCost, octaveJumpCost, voicedUnvoicedCost, ceiling)
+    End Function
+
+    Function Sound_to_Pitch(ByRef mme As Sound, ByVal timeStep As Double, ByVal minimumPitch As Double, ByVal maximumPitch As Double) As Pitch
+        Return Sound_to_Pitch_ac(mme, timeStep, minimumPitch, 3.0, 15, False, 0.03, 0.45, 0.01, 0.35, 0.14, maximumPitch)
+    End Function
+
+    Function Sound_Pitch_to_PointProcess_cc(ByRef sound As Sound, ByRef pitch As Pitch) As PointProcess
+        'TODO
+        Return Nothing
+    End Function
+
+    Function Sampled_indexToX(ByRef mme As Sampled, ByVal i As Long) As Double
+        Return mme.x1 + (i - 1) * mme.dx
+    End Function
+
+    Function Pitch_to_PitchTier(ByRef mme As Pitch) As PitchTier
+        Try
+            Dim thee As PitchTier = New PitchTier(mme.xmin, mme.xmax)
+            For i As Long = 0 To mme.nx - 1 Step 1
+                Dim frequency As Double = mme.frame(i).candidates(0).frequency
+
+                '/*
+                ' * Count only voiced frames.
+                '*/
+                If (frequency > 0.0 And frequency < mme.ceiling) Then
+                    Dim time As Double = Sampled_indexToX(mme, i)
+                    thee.RealTier_addPoint(time, frequency)
+                End If
+            Next
+            Return thee
+        Catch ex As Exception
+            Return Nothing
+        End Try
+    End Function
+    Sub Vector_subtractMean(ByRef mme As Vector)
+        'TODO
+    End Sub
     Sub Main()
         Dim s As Sound = Sound_readFromSoundFile("C:\Users\fae1987\Documents\LOL\PraatSound\melanie.wav")
+        Vector_subtractMean(s)
+        Dim timestep As Double
+        Dim minimumPitch As Double
+        Dim maximumPitch As Double
+        Dim pit As Pitch = Sound_to_Pitch(s, timestep, minimumPitch, maximumPitch)
+
+        Dim pulses As PointProcess = Sound_Pitch_to_PointProcess_cc(s, pit)
+        Dim pitch As PitchTier = Pitch_to_PitchTier(pit)
     End Sub
 
 End Module
