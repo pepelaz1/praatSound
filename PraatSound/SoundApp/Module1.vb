@@ -28,6 +28,14 @@
     Public Const WAVE_FORMAT_MULAW = &H7
     Public Const WAVE_FORMAT_DVI_ADPCM = &H11
 
+    Public Const Pitch_NEAREST = 0
+    Public Const Pitch_LINEAR = 1
+
+    Public Const Pitch_LEVEL_FREQUENCY = 1
+    Public Const Pitch_LEVEL_STRENGTH = 2
+
+    Public Const NUMundefined = System.Double.PositiveInfinity
+
     Public Melder_debug As Long = 0
 
     'Private Declare Function GetAddrOf Lib "KERNEL32" Alias "MulDiv" (nNumber As Integer, Optional ByVal nNumerator As Integer = 1, Optional ByVal nDenominator As Integer = 1) As Long
@@ -322,7 +330,7 @@
         If (mme.nt = 0) Then
             Return 0
         End If
-        If (t <= mme.t(1)) Then
+        If (t <= mme.t(0)) Then
             Return 1
         End If
         If (t >= mme.t(mme.nt)) Then
@@ -330,7 +338,7 @@
         End If
 
         '/* Start binary search. */
-        Dim left As Long = 1, right = mme.nt
+        Dim left As Long = 0, right = mme.nt - 1
         While (left < right - 1)
             Dim mid As Long = (left + right) / 2
             If (t >= mme.t(mid)) Then
@@ -348,6 +356,7 @@
             Return right
         End If
     End Function
+
 
     Function Sampled_xToLowIndex(ByVal mme As Sampled, ByVal x As Double) As Long
         Return Convert.ToInt64(Math.Floor((x - mme.x1) / mme.dx) + 1)
@@ -673,7 +682,7 @@ endofswitch:
                                 Next
                             Next
                         End If
-                        End If
+                    End If
             End Select
         Catch ex As Exception
             Console.WriteLine(ex.Message)
@@ -940,9 +949,345 @@ endoffor: If (Not formatChunkPresent) Then
         Return Sound_to_Pitch_ac(mme, timeStep, minimumPitch, 3.0, 15, False, 0.03, 0.45, 0.01, 0.35, 0.14, maximumPitch)
     End Function
 
-    Function Sound_Pitch_to_PointProcess_cc(ByRef sound As Sound, ByRef pitch As Pitch) As PointProcess
+
+    Function Sampled_xToIndex(ByRef mme As Sampled, ByVal x As Double) As Double
+        Return (x - mme.x1) / mme.dx + 1
+    End Function
+
+    Function Sampled_getValueAtSample(ByRef mme As Sampled, ByVal isamp As Long, ByVal ilevel As Long, ByVal unit As Integer) As Double
+        If (isamp < 0 Or isamp > mme.nx - 1) Then
+            Return NUMundefined
+        End If
+        Return mme.v_getValueAtSample(isamp, ilevel, unit)
+    End Function
+
+
+    Function Sampled_xToNearestIndex(ByRef mme As Sampled, ByVal x As Double) As Long
+        Return Convert.ToInt32(Math.Floor((x - mme.x1) / mme.dx + 1.5))
+    End Function
+
+    Function Sampled_getValueAtX(ByRef mme As Sampled, ByVal x As Double, ByVal ilevel As Long, ByVal unit As Integer, ByVal interpolate As Integer) As Double
+        If (x < mme.xmin Or x > mme.xmax) Then
+            Return NUMundefined
+        End If
+        If (interpolate) Then
+            Dim ireal As Double = Sampled_xToIndex(mme, x)
+            Dim ileft As Long = Math.Floor(ireal), inear, ifar
+            Dim phase As Double = ireal - ileft
+            If (phase < 0.5) Then
+                inear = ileft
+                ifar = ileft + 1
+            Else
+                ifar = ileft
+                inear = ileft + 1
+                phase = 1.0 - phase
+            End If
+            If (inear < 1 Or inear > mme.nx) Then
+                Return NUMundefined
+            End If
+            '// x out of range?
+            Dim fnear As Double = mme.v_getValueAtSample(inear, ilevel, unit)
+            '   // function value not defined?
+            If (fnear = NUMundefined) Then
+                Return NUMundefined
+            End If
+            '// at edge? Extrapolate
+            If (ifar < 0 Or ifar > mme.nx - 1) Then
+                Return fnear
+            End If
+            Dim ffar As Double = mme.v_getValueAtSample(ifar, ilevel, unit)
+            '// neighbour undefined? Extrapolate
+            If (ffar = NUMundefined) Then
+                Return fnear
+            End If
+            '   // interpolate
+            Return fnear + phase * (ffar - fnear)
+        End If
+        Return Sampled_getValueAtSample(mme, Sampled_xToNearestIndex(mme, x), ilevel, unit)
+    End Function
+
+    Function Pitch_getValueAtTime(ByRef mme As Pitch, ByVal time As Double, ByVal unit As Integer, ByVal interpolate As Integer) As Double
+        Return Sampled_getValueAtX(mme, time, Pitch_LEVEL_FREQUENCY, unit, interpolate)
+    End Function
+
+    Function Sound_findMaximumCorrelation(ByRef mme As Sound, ByVal t1 As Double, ByVal windowLength As Double, ByVal tmin2 As Double, ByVal tmax2 As Double, ByVal tout As Double, ByVal peak As Double) As Double
+        Dim maximumCorrelation = -1.0, r1 = 0.0, r2 = 0.0, r3 = 0.0, r1_best, r3_best, ir As Double
+        Dim halfWindowLength As Double = 0.5 * windowLength
+        Dim ileft1 As Long = Sampled_xToNearestIndex(mme, t1 - halfWindowLength)
+        Dim iright1 As Long = Sampled_xToNearestIndex(mme, t1 + halfWindowLength)
+        Dim ileft2min As Long = Sampled_xToLowIndex(mme, tmin2 - halfWindowLength)
+        Dim ileft2max As Long = Sampled_xToHighIndex(mme, tmax2 - halfWindowLength)
+        Dim i2 As Long
+        '   /* Default. */
+        peak = 0.0
+        For ileft2 As Long = ileft2min To ileft2max Step 1
+            Dim norm1 As Double = 0.0, norm2 = 0.0, product = 0.0, localPeak = 0.0
+            If (mme.ny = 1) Then
+                i2 = ileft2
+                For i1 As Long = ileft1 To iright1 Step 1
+                    If (i1 < 1 Or i1 > mme.nx Or i2 < 1 Or i2 > mme.nx) Then
+                        Continue For
+                    End If
+                    Dim amp1 As Double = mme.z(0, i1), amp2 = mme.z(0, i2)
+                    norm1 += amp1 * amp1
+                    norm2 += amp2 * amp2
+                    product += amp1 * amp2
+                    If (Math.Abs(amp2) > localPeak) Then
+                        localPeak = Math.Abs(amp2)
+                    End If
+                    i2 = i2 + 1
+                Next
+            Else
+                i2 = ileft2
+                For i1 As Long = ileft1 To iright1 Step 1
+                    If (i1 < 1 Or i1 > mme.nx Or i2 < 1 Or i2 > mme.nx) Then
+                        Continue For
+                    End If
+                    Dim amp1 As Double = 0.5 * (mme.z(0, i1) + mme.z(1, i1)), amp2 = 0.5 * (mme.z(0, i2) + mme.z(1, i2))
+                    norm1 += amp1 * amp1
+                    norm2 += amp2 * amp2
+                    product += amp1 * amp2
+                    If (Math.Abs(amp2) > localPeak) Then
+                        localPeak = Math.Abs(amp2)
+                    End If
+                    i2 += 1
+                Next
+            End If
+            r1 = r2
+            r2 = r3
+            If (product <> 0) Then
+                r3 = product / (Math.Sqrt(norm1 * norm2))
+            Else
+                r3 = 0
+            End If
+            If (r2 > maximumCorrelation And r2 >= r1 And r2 >= r3) Then
+                r1_best = r1
+                maximumCorrelation = r2
+                r3_best = r3
+                ir = ileft2 - 1
+                peak = localPeak
+            End If
+        Next
+        '/*
+        '* Improve the result by means of parabolic interpolation.
+        '*/
+        If (maximumCorrelation > -1.0) Then
+            Dim d2r As Double = 2 * maximumCorrelation - r1_best - r3_best
+            If (d2r <> 0.0) Then
+                Dim dr As Double = 0.5 * (r3_best - r1_best)
+                maximumCorrelation += 0.5 * dr * dr / d2r
+                ir += dr / d2r
+            End If
+            tout = t1 + (ir - ileft1) * mme.dx
+        End If
+        Return maximumCorrelation
+    End Function
+
+    Function findExtremum_3(ByRef mme As Sound, ByVal channel1_index As Long, ByVal channel2_index As Long, ByVal d As Long, ByVal n As Long, ByVal includeMaxima As Integer, ByVal includeMinima As Integer) As Double
         'TODO
-        Return Nothing
+        Return 0
+    End Function
+
+    Function Sound_findExtremum(ByRef mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal includeMaxima As Integer, ByVal includeMinima As Integer) As Double
+        Dim imin As Long = Sampled_xToLowIndex(mme, tmin), imax = Sampled_xToHighIndex(mme, tmax)
+        If (tmin = NUMundefined) Then
+            Console.WriteLine("Error in Find Extremum: tmin is undefined")
+            Return -1
+        End If
+        If (tmax = NUMundefined) Then
+            Console.WriteLine("Error in Find Extremum: tmax is undefined")
+            Return -1
+        End If
+        If (imin < 0) Then
+            imin = 0
+        End If
+        If (imax > mme.nx) Then
+            imax = mme.nx
+        End If
+        Dim g As Double
+        If mme.ny > 1 Then
+            g = 1
+        Else
+            g = -1
+        End If
+        ' 0 = index in 1 dimension of z = double *channel1_base
+        ' g - index in 1 dimension of z = double *channel2_base
+        Dim iextremum As Double = findExtremum_3(mme, 0, g, imin - 1, imax - imin + 1, includeMaxima, includeMinima)
+        If (True) Then
+            Return mme.x1 + (imin - 1 + iextremum - 1) * mme.dx
+        Else
+            Return (tmin + tmax) / 2
+        End If
+    End Function
+
+    Function Pitch_isVoiced_i(ByRef mme As Pitch, ByVal iframe As Long) As Boolean
+        Return Sampled_getValueAtSample(mme, iframe, Pitch_LEVEL_FREQUENCY, 0) <> NUMundefined
+    End Function
+
+    Function Pitch_getVoicedIntervalAfter(ByRef mme As Pitch, ByVal after As Double, ByVal tleft As Double, ByVal tright As Double) As Integer
+        Dim ileft As Long = Sampled_xToHighIndex(mme, after), iright
+        '/* Offright. */
+        If (ileft > mme.nx - 1) Then
+            Return 0
+        End If
+        '/* Offleft. */
+        If (ileft < 0) Then
+            ileft = 1
+        End If
+
+
+        '/* Search for first voiced frame. */
+        For ileft = ileft To mme.nx Step 1
+            If (Pitch_isVoiced_i(mme, ileft)) Then
+                GoTo exitfor
+            End If
+        Next
+        ' /* Offright. */
+exitfor: If (ileft > mme.nx) Then
+            Return 0
+        End If
+
+        '/* Search for last voiced frame. */
+        For iright = ileft To mme.nx - 1 Step 1
+            If (Not Pitch_isVoiced_i(mme, iright)) Then
+                GoTo exitfor1
+            End If
+        Next
+        iright -= 1
+
+        '/* The whole frame is considered voiced. */
+exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
+        tright = Sampled_indexToX(mme, iright) + 0.5 * mme.dx
+        If (tleft >= mme.xmax - 0.5 * mme.dx) Then
+            Return 0
+        End If
+        If (tleft < mme.xmin) Then
+            tleft = mme.xmin
+        End If
+        If (tright > mme.xmax) Then
+            tright = mme.xmax
+        End If
+        Return 1
+    End Function
+
+
+    Sub Vector_getMaximumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, ByVal return_maximum As Double)
+        'TODO
+    End Sub
+    Function Vector_getMaximum(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer) As Double
+        Dim maximum As Double
+        Vector_getMaximumAndXAndChannel(mme, xmin, xmax, interpolation, maximum)
+        Return maximum
+    End Function
+    Sub Vector_getMinimumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, ByVal return_minimum As Double)
+        'TODO
+    End Sub
+    Function Vector_getMinimum(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer) As Double
+        Dim minimum As Double
+        Vector_getMinimumAndXAndChannel(mme, xmin, xmax, interpolation, minimum)
+        Return minimum
+    End Function
+    Private Function Vector_getAbsoluteExtremum(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer) As Double
+        Dim minimum As Double = Math.Abs(Vector_getMinimum(mme, xmin, xmax, interpolation))
+        Dim maximum As Double = Math.Abs(Vector_getMaximum(mme, xmin, xmax, interpolation))
+        If (minimum > maximum) Then
+            Return minimum
+        Else
+            Return maximum
+        End If
+    End Function
+    Function Sound_Pitch_to_PointProcess_cc(ByRef sound As Sound, ByRef pitch As Pitch) As PointProcess
+        Try
+            Dim point As PointProcess = New PointProcess(sound.xmin, sound.xmax, 10)
+            Dim t As Double = pitch.xmin
+            Dim addedRight As Double = -1.0E+300
+            Dim globalPeak As Double = Vector_getAbsoluteExtremum(sound, sound.xmin, sound.xmax, 0), peak = 0
+
+            '/*
+            ' * Cycle over all voiced intervals.
+            '*/
+            'autoMelderProgress progress (L"Sound & Pitch: To PointProcess...");
+            While 1 = 1
+                Dim tleft, tright As Double
+                If (Not Pitch_getVoicedIntervalAfter(pitch, t, tleft, tright)) Then
+                    GoTo endofglobalwhile
+                End If
+                '/*
+                ' * Go to the middle of the voice stretch.
+                '*/
+                Dim tmiddle As Double = (tleft + tright) / 2
+                'Melder_progress ((tmiddle - sound -> xmin) / (sound -> xmax - sound -> xmin), L"Sound & Pitch to PointProcess")
+                Dim f0middle As Double = Pitch_getValueAtTime(pitch, tmiddle, 0, Pitch_LINEAR)
+
+                '/*
+                '* Our first point is near this middle.
+                '*/
+                If (f0middle = NUMundefined) Then
+                    'Melder_fatal("Sound_Pitch_to_PointProcess_cc: tleft %ls, tright %ls, f0middle %ls", Melder_double(tleft), Melder_double(tright), Melder_double(f0middle))
+                    Console.WriteLine("Sound_Pitch_to_PointProcess_cc: f0middle = NUMundefined")
+                    Return Nothing
+                End If
+                Dim tmax As Double = Sound_findExtremum(sound, tmiddle - 0.5 / f0middle, tmiddle + 0.5 / f0middle, True, True)
+                If (tmax = NUMundefined) Then
+                    Console.WriteLine("Error in Find Extremum: tmax is undefined")
+                    Return Nothing
+                End If
+                point.addPoint(tmax)
+
+                Dim tsave As Double = tmax
+                While 1 = 1
+                    Dim f0 As Double = Pitch_getValueAtTime(pitch, tmax, 0, Pitch_LINEAR), correlation
+                    If (f0 = NUMundefined) Then
+                        GoTo endofwhile1
+                    End If
+                    correlation = Sound_findMaximumCorrelation(sound, tmax, 1.0 / f0, tmax - 1.25 / f0, tmax - 0.8 / f0, tmax, peak)
+                    If (correlation = -1) Then
+                        tmax -= 1.0 / f0
+                    End If
+                    '/* This one period will drop out. */
+                    If (tmax < tleft) Then
+                        If (correlation > 0.7 And peak > 0.023333 * globalPeak And (tmax - addedRight) > (0.8 / f0)) Then
+                            point.addPoint(tmax)
+                        End If
+                        GoTo endofwhile1
+                    End If
+                    If (correlation > 0.3 And (peak = 0.0 Or peak > 0.01 * globalPeak)) Then
+                        If (tmax - addedRight > 0.8 / f0) Then
+                            '// do not fill in a short originally unvoiced interval twice
+                            point.addPoint(tmax)
+                        End If
+                    End If
+                End While
+endofwhile1:    tmax = tsave
+                While 1 = 1
+                    Dim f0 As Double = Pitch_getValueAtTime(pitch, tmax, 0, Pitch_LINEAR), correlation
+                    If (f0 = NUMundefined) Then
+                        GoTo endofwhile2
+                    End If
+                    correlation = Sound_findMaximumCorrelation(sound, tmax, 1.0 / f0, tmax + 0.8 / f0, tmax + 1.25 / f0, tmax, peak)
+                    If (correlation = -1) Then
+                        tmax = tmax + 1.0 / f0
+                    End If
+                    If (tmax > tright) Then
+                        If (correlation > 0.7 And peak > 0.023333 * globalPeak) Then
+                            point.addPoint(tmax)
+                            addedRight = tmax
+                        End If
+                        GoTo endofwhile2
+                    End If
+                    If (correlation > 0.3 And (peak = 0.0 Or peak > 0.01 * globalPeak)) Then
+                        point.addPoint(tmax)
+                        addedRight = tmax
+                    End If
+                End While
+endofwhile2:    t = tright
+            End While
+endofglobalwhile: Return point
+        Catch ex As Exception
+            Console.WriteLine("sound and pitch,  not converted to PointProcess (cc).")
+            Return Nothing
+        End Try
+
     End Function
 
     Function Sampled_indexToX(ByRef mme As Sampled, ByVal i As Long) As Double
@@ -982,5 +1327,7 @@ endoffor: If (Not formatChunkPresent) Then
         Dim pulses As PointProcess = Sound_Pitch_to_PointProcess_cc(s, pit)
         Dim pitch As PitchTier = Pitch_to_PitchTier(pit)
     End Sub
+
+
 
 End Module

@@ -15,4 +15,8 @@
         mme.dx = dx
         mme.x1 = x1
     End Sub
+    ' DEFINE IN REST CLASSES,  WHICH INHERITS SAMPLED!!!
+    Overridable Function v_getValueAtSample(ByVal isamp As Long, ByVal ilevel As Long, ByVal unit As Long) As Double
+        Return System.Double.PositiveInfinity
+    End Function
 End Class
