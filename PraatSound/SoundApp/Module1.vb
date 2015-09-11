@@ -34,6 +34,32 @@
     Public Const Pitch_LEVEL_FREQUENCY = 1
     Public Const Pitch_LEVEL_STRENGTH = 2
 
+    Public Const Vector_CHANNEL_AVERAGE = 0
+    Public Const Vector_CHANNEL_1 = 1
+    Public Const Vector_CHANNEL_2 = 2
+
+    Public Const Vector_VALUE_INTERPOLATION_NEAREST = 0
+    Public Const Vector_VALUE_INTERPOLATION_LINEAR = 1
+    Public Const Vector_VALUE_INTERPOLATION_CUBIC = 2
+    Public Const Vector_VALUE_INTERPOLATION_SINC70 = 3
+    Public Const Vector_VALUE_INTERPOLATION_SINC700 = 4
+
+    Public Const NUM_VALUE_INTERPOLATE_NEAREST = 0
+    Public Const NUM_VALUE_INTERPOLATE_LINEAR = 1
+    Public Const NUM_VALUE_INTERPOLATE_CUBIC = 2
+    '// Higher values than 2 yield a true sinc interpolation. Here are some examples:
+    Public Const NUM_VALUE_INTERPOLATE_SINC70 = 70
+    Public Const NUM_VALUE_INTERPOLATE_SINC700 = 700
+
+
+    Public Const NUM_PEAK_INTERPOLATE_NONE = 0
+    Public Const NUM_PEAK_INTERPOLATE_PARABOLIC = 1
+    Public Const NUM_PEAK_INTERPOLATE_CUBIC = 2
+    Public Const NUM_PEAK_INTERPOLATE_SINC70 = 3
+    Public Const NUM_PEAK_INTERPOLATE_SINC700 = 4
+
+    Public Const MAX_T = 0.02000000001
+
     Public Const NUMundefined = System.Double.PositiveInfinity
 
     Public Melder_debug As Long = 0
@@ -1170,9 +1196,342 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return 1
     End Function
 
-
-    Sub Vector_getMaximumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, ByVal return_maximum As Double)
+    Function NUMminimize_brent(ByVal a As Double, ByVal b As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer, ByVal tol As Double, ByVal fx As Double) As Double
         'TODO
+        Return 0
+    End Function
+
+    Function NUMimproveExtremum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByVal ixmid_real As Double, ByVal isMaximum As Integer) As Double
+        '!!! struct improve_params params;
+        Dim result As Double
+        If (ixmid <= 1) Then
+            ixmid_real = 1
+            Return z(channel, 0)
+        End If
+
+        If (ixmid >= nx) Then
+            ixmid_real = nx
+            Return z(channel, nx - 1)
+        End If
+        If (interpolation <= NUM_PEAK_INTERPOLATE_NONE) Then
+            ixmid_real = ixmid
+            Return z(channel, ixmid)
+        End If
+        If (interpolation = NUM_PEAK_INTERPOLATE_PARABOLIC) Then
+            Dim dy As Double = 0.5 * (z(channel, ixmid + 1) - z(channel, ixmid - 1))
+            Dim d2y As Double = 2 * z(channel, ixmid) - z(channel, ixmid - 1) - z(channel, ixmid + 1)
+            ixmid_real = ixmid + dy / d2y
+            Return z(channel, ixmid) + 0.5 * dy * dy / d2y
+        End If
+        '/* Sinc interpolation. */
+        'params.y = y
+        Dim depth As Long
+        If interpolation = NUM_PEAK_INTERPOLATE_SINC70 Then
+            depth = 70
+        Else
+            depth = 700
+        End If
+        'params.ixmax = nx
+        'params.isMaximum = isMaximum
+        '!!! improve_evaluate
+        ixmid_real = NUMminimize_brent(ixmid - 1, ixmid + 1, z, channel, depth, nx, isMaximum, 0.0000000001, result)
+        If isMaximum Then
+            Return -result
+        Else
+            Return result
+        End If
+    End Function
+
+    Function NUMimproveMaximum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByVal ixmid_real As Double) As Double
+        Return NUMimproveExtremum(z, channel, nx, ixmid, interpolation, ixmid_real, 1)
+    End Function
+    Function NUMimproveMinimum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByVal ixmid_real As Double) As Double
+        Return NUMimproveExtremum(z, channel, nx, ixmid, interpolation, ixmid_real, 0)
+    End Function
+    Function Sampled_getWindowSamples(ByRef mme As Sampled, ByVal xmin As Double, ByVal xmax As Double, ByRef ixmin As Long, ByRef ixmax As Long) As Long
+        Dim rixmin As Double = 1.0 + Math.Ceiling((xmin - mme.x1) / mme.dx)
+        Dim rixmax As Double = 1.0 + Math.Floor((xmax - mme.x1) / mme.dx)
+        'ixmin = rixmin < 1.0 ? 1 : (long) rixmin
+        If rixmin < 1.0 Then
+            ixmin = 0
+        Else
+            ixmin = Convert.ToInt32(rixmin)
+        End If
+        If ixmax > Convert.ToDouble(mme.nx) Then
+            ixmax = mme.nx - 1
+        Else
+            ixmax = Convert.ToInt32(rixmax)
+        End If
+        '= rixmax > (double) my nx ? my nx : (long) rixmax
+        If (ixmin > ixmax) Then
+            Return 0
+        End If
+        Return ixmax - ixmin + 1
+    End Function
+
+    Function NUM_interpolate_sinc(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal x As Double, ByVal maxDepth As Long) As Double
+        Dim ix, midleft As Long, midright = midleft + 1, left, right
+        midleft = Math.Floor(x)
+        Dim result As Double = 0.0, a, halfsina, aa, daa
+
+        If (nx < 0) Then
+            Return NUMundefined
+        End If
+        If (x > nx - 1) Then
+            Return z(channel, nx)
+        End If
+        If (x < 0) Then
+            Return z(channel, 0)
+        End If
+        If (x = midleft) Then
+            Return z(channel, midleft)
+        End If
+        If (maxDepth > midright - 1) Then
+            maxDepth = midright - 1
+        End If
+        If (maxDepth > nx - midleft) Then
+            maxDepth = nx - midleft
+        End If
+        If (maxDepth <= NUM_VALUE_INTERPOLATE_NEAREST) Then
+            Return z(channel, Convert.ToUInt32(Math.Floor(x + 0.5)))
+        End If
+        If (maxDepth = NUM_VALUE_INTERPOLATE_LINEAR) Then
+            Return z(channel, midleft) + (x - midleft) * (z(channel, midright) - z(channel, midleft))
+        End If
+        If (maxDepth = NUM_VALUE_INTERPOLATE_CUBIC) Then
+            Dim yl As Double = z(channel, midleft), yr = z(channel, midright)
+            Dim dyl As Double = 0.5 * (yr - z(channel, midleft - 1)), dyr = 0.5 * (z(channel, midright + 1) - yl)
+            Dim fil As Double = x - midleft, fir = midright - x
+            Return yl * fir + yr * fil - fil * fir * (0.5 * (dyr - dyl) + (fil - 0.5) * (dyl + dyr - 2 * (yr - yl)))
+        End If
+        left = midright - maxDepth
+        right = midleft + maxDepth
+        a = Math.PI * (x - midleft)
+        halfsina = 0.5 * Math.Sin(a)
+        aa = a / (x - left + 1)
+        daa = Math.PI / (x - left + 1)
+        For ix = midleft To left Step -1
+            Dim d As Double = halfsina / a * (1.0 + Math.Cos(aa))
+            result += z(channel, ix) * d
+            a += Math.PI
+            aa += daa
+            halfsina = -halfsina
+        Next
+        a = Math.PI * (midright - x)
+        halfsina = 0.5 * Math.Sin(a)
+        aa = a / (right - x + 1)
+        daa = Math.PI / (right - x + 1)
+        For ix = midright To right Step 1
+            Dim d As Double = halfsina / a * (1.0 + Math.Cos(aa))
+            result += z(channel, ix) * d
+            a += Math.PI
+            aa += daa
+            halfsina = -halfsina
+        Next
+        Return result
+    End Function
+
+    Function Vector_getValueAtX(ByRef mme As Vector, ByVal x As Double, ByVal ilevel As Long, ByVal interpolation As Integer) As Double
+        Dim leftEdge As Double = mme.x1 - 0.5 * mme.dx, rightEdge = leftEdge + mme.nx * mme.dx
+        If (x < leftEdge Or x > rightEdge) Then
+            Return NUMundefined
+        End If
+        If (ilevel > Vector_CHANNEL_AVERAGE) Then
+            '!!!Melder_assert (ilevel <= my ny)
+            Dim interp As Long
+            If interpolation = Vector_VALUE_INTERPOLATION_SINC70 Then
+                interp = NUM_VALUE_INTERPOLATE_SINC70
+            ElseIf interpolation = Vector_VALUE_INTERPOLATION_SINC700 Then
+                interp = NUM_VALUE_INTERPOLATE_SINC700
+            Else
+                interp = interpolation
+            End If
+            Return NUM_interpolate_sinc(mme.z, ilevel, mme.nx, Sampled_xToIndex(mme, x), interp)
+        End If
+        Dim sum As Double = 0.0
+        For channel As Long = 1 To mme.ny Step 1
+            Dim interp As Long
+            If interpolation = Vector_VALUE_INTERPOLATION_SINC70 Then
+                interp = NUM_VALUE_INTERPOLATE_SINC70
+            ElseIf interpolation = Vector_VALUE_INTERPOLATION_SINC700 Then
+                interp = NUM_VALUE_INTERPOLATE_SINC700
+            Else
+                interp = interpolation
+            End If
+            sum += NUM_interpolate_sinc(mme.z, channel, mme.nx, Sampled_xToIndex(mme, x), interp)
+        Next
+        Return sum / mme.ny
+    End Function
+    Sub Vector_getMaximumAndX(ByRef mme As Vector, xmin As Double, xmax As Double, channel As Long, interpolation As Integer, ByVal return_maximum As Double, return_xOfMaximum As Double)
+        Dim n As Long = mme.nx, imin = 0, imax = 0, i
+        '!!!Melder_assert (channel >= 1 && channel <= my ny);
+        'double *y = my z [channel]
+        Dim maximum, x As Double
+        If (xmax <= xmin) Then
+            xmin = mme.xmin
+            xmax = mme.xmax
+        End If
+        If (Not Sampled_getWindowSamples(mme, xmin, xmax, imin, imax)) Then
+            '/*
+            ' * No samples between xmin and xmax.
+            ' * Try to return the greater of the values at these two points.
+            ' */
+            Dim k As Long
+            If (interpolation > Vector_VALUE_INTERPOLATION_NEAREST) Then
+                k = Vector_VALUE_INTERPOLATION_LINEAR
+            Else
+                k = Vector_VALUE_INTERPOLATION_NEAREST
+            End If
+            Dim yleft As Double = Vector_getValueAtX(mme, xmin, channel, k)
+            Dim yright As Double = Vector_getValueAtX(mme, xmax, channel, k)
+            If yleft > yright Then
+                maximum = yleft
+            Else
+                maximum = yright
+            End If
+            If yleft = yright Then
+                x = (xmin + xmax) / 2
+            ElseIf (yleft > yright) Then
+                x = xmin
+            Else
+                x = xmax
+            End If
+        Else
+            maximum = mme.z(channel, imin)
+            x = imin
+            If (mme.z(channel, imax) > maximum) Then
+                maximum = mme.z(channel, imax)
+                x = imax
+            End If
+            If (imin = 0) Then
+                imin += 1
+            End If
+            If (imax = mme.nx - 1) Then
+                imax -= 1
+            End If
+            For i = imin To imax - 1 Step 1
+                If (mme.z(channel, i) > mme.z(channel, i - 1) And mme.z(channel, i) >= mme.z(channel, i + 1)) Then
+                    Dim i_real As Double = 0
+                    Dim localMaximum As Double = NUMimproveMaximum(mme.z, channel, n, i, interpolation, i_real)
+                    If (localMaximum > maximum) Then
+                        maximum = localMaximum
+                        x = i_real
+                    End If
+                End If
+
+            Next
+            '/* Convert sample to x. */
+            x = mme.x1 + (x - 1) * mme.dx
+            If (x < xmin) Then
+                x = xmin
+            ElseIf (x > xmax) Then
+                x = xmax
+            End If
+        End If
+        If (return_maximum) Then
+            return_maximum = maximum
+        End If
+        'If (return_xOfMaximum) Then
+        'return_xOfMaximum = x
+        'End If
+    End Sub
+
+    Sub Vector_getMinimumAndX(ByRef mme As Vector, xmin As Double, xmax As Double, channel As Long, interpolation As Integer, ByVal return_minimum As Double, return_xOfMinimum As Double)
+        Dim n As Long = mme.nx, imin = 0, imax = 0
+        '!!!Melder_assert (channel >= 1 && channel <= my ny);
+        'double *y = my z [channel]
+        Dim minimum, x As Double
+        If (xmax <= xmin) Then
+            xmin = mme.xmin
+            xmax = mme.xmax
+        End If
+        If (Not Sampled_getWindowSamples(mme, xmin, xmax, imin, imax)) Then
+            '/*
+            ' * No samples between xmin and xmax.
+            ' * Try to return the greater of the values at these two points.
+            ' */
+            Dim k As Long
+            If (interpolation > Vector_VALUE_INTERPOLATION_NEAREST) Then
+                k = Vector_VALUE_INTERPOLATION_LINEAR
+            Else
+                k = Vector_VALUE_INTERPOLATION_NEAREST
+            End If
+            Dim yleft As Double = Vector_getValueAtX(mme, xmin, channel, k)
+            Dim yright As Double = Vector_getValueAtX(mme, xmax, channel, k)
+            If yleft < yright Then
+                minimum = yleft
+            Else
+                minimum = yright
+            End If
+            If yleft = yright Then
+                x = (xmin + xmax) / 2
+            ElseIf (yleft < yright) Then
+                x = xmin
+            Else
+                x = xmax
+            End If
+        Else
+            minimum = mme.z(channel, imin)
+            x = imin
+            If (mme.z(channel, imax) < minimum) Then
+                minimum = mme.z(channel, imax)
+                x = imax
+            End If
+            If (imin = 0) Then
+                imin += 1
+            End If
+            If (imax = mme.nx - 1) Then
+                imax -= 1
+            End If
+            For i = imin To imax - 1 Step 1
+                If (mme.z(channel, i) < mme.z(channel, i - 1) And mme.z(channel, i) <= mme.z(channel, i + 1)) Then
+                    Dim i_real As Double = 0
+                    Dim localminimum As Double = NUMimproveMinimum(mme.z, channel, n, i, interpolation, i_real)
+                    If (localminimum < minimum) Then
+                        minimum = localminimum
+                        x = i_real
+                    End If
+                End If
+
+            Next
+            '/* Convert sample to x. */
+            x = mme.x1 + (x - 1) * mme.dx
+            If (x < xmin) Then
+                x = xmin
+            ElseIf (x > xmax) Then
+                x = xmax
+            End If
+        End If
+        If (return_minimum) Then
+            return_minimum = minimum
+        End If
+        'If (return_xOfminimum) Then
+        'return_xOfminimum = x
+        'End If
+    End Sub
+
+    Sub Vector_getMaximumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, return_maximum As Double)
+        Dim maximum, xOfMaximum As Double
+        Dim channelOfMaximum As Long = 1
+        Vector_getMaximumAndX(mme, xmin, xmax, 1, interpolation, maximum, xOfMaximum)
+        For channel As Long = 2 To mme.ny Step 1
+            Dim maximumOfChannel, xOfMaximumOfChannel As Double
+            Vector_getMaximumAndX(mme, xmin, xmax, channel, interpolation, maximumOfChannel, xOfMaximumOfChannel)
+            If (maximumOfChannel > maximum) Then
+                maximum = maximumOfChannel
+                xOfMaximum = xOfMaximumOfChannel
+                channelOfMaximum = channel
+            End If
+        Next
+        If (return_maximum) Then
+            return_maximum = maximum
+        End If
+        '  If (return_xOfMaximum) Then
+        'return_xOfMaximum = xOfMaximum
+        '  End If
+        ' If (return_channelOfMaximum) Then
+        '      return_channelOfMaximum = channelOfMaximum
+        '  End If
     End Sub
     Function Vector_getMaximum(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer) As Double
         Dim maximum As Double
@@ -1180,7 +1539,22 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return maximum
     End Function
     Sub Vector_getMinimumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, ByVal return_minimum As Double)
-        'TODO
+        Dim minimum, xOfMinimum As Double
+        Dim channelOfMinimum As Long = 1
+        Vector_getMinimumAndX(mme, xmin, xmax, 1, interpolation, minimum, xOfMinimum)
+        For channel As Long = 2 To mme.ny Step 1
+            Dim minimumOfChannel, xOfMinimumOfChannel As Double
+            Vector_getMinimumAndX(mme, xmin, xmax, channel, interpolation, minimumOfChannel, xOfMinimumOfChannel)
+            If (minimumOfChannel < minimum) Then
+                minimum = minimumOfChannel
+                xOfMinimum = xOfMinimumOfChannel
+                channelOfMinimum = channel
+            End If
+        Next
+        If (return_minimum) Then
+            return_minimum = minimum
+        End If
+
     End Sub
     Function Vector_getMinimum(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer) As Double
         Dim minimum As Double
@@ -1314,18 +1688,29 @@ endofglobalwhile: Return point
         End Try
     End Function
     Sub Vector_subtractMean(ByRef mme As Vector)
-        'TODO
+        For channel As Long = 0 To mme.ny - 1 Step 1
+            Dim sum As Double = 0.0
+            For i As Long = 0 To mme.nx - 1 Step 1
+                sum += mme.z(channel, i)
+            Next
+            Dim mean As Double = sum / mme.nx
+            For i As Long = 1 To mme.nx - 1 Step 1
+                mme.z(channel, i) -= mean
+            Next
+        Next
     End Sub
     Sub Main()
         Dim s As Sound = Sound_readFromSoundFile("C:\Users\fae1987\Documents\LOL\PraatSound\melanie.wav")
         Vector_subtractMean(s)
-        Dim timestep As Double
-        Dim minimumPitch As Double
-        Dim maximumPitch As Double
+        Dim timestep As Double = 0.01
+        Dim minimumPitch As Double = 75
+        Dim maximumPitch As Double = 600
         Dim pit As Pitch = Sound_to_Pitch(s, timestep, minimumPitch, maximumPitch)
 
         Dim pulses As PointProcess = Sound_Pitch_to_PointProcess_cc(s, pit)
         Dim pitch As PitchTier = Pitch_to_PitchTier(pit)
+        Dim duration As DurationTier = New DurationTier(pit.xmin, pit.xmax)
+        Dim sProcessed As Sound = Sound_Point_Pitch_Duration_to_Sound(s, pulses, pitch, duration, MAX_T)
     End Sub
 
 
