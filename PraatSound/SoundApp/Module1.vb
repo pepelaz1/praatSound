@@ -60,7 +60,17 @@
 
     Public Const MAX_T = 0.02000000001
 
+    Public NUM_goldenSection As Double = 0.6180339887498949
+    '0.6180339887498948482045868343656381177203
+
     Public Const NUMundefined = System.Double.PositiveInfinity
+    Public NUMEulersConstant As Double = Math.E
+    Public NUMLog2E As Double = Math.Log(NUMEulersConstant, 2)
+
+    Public Const AC_HANNING = 0
+    Public Const AC_GAUSS = 1
+    Public Const FCC_NORMAL = 2
+    Public Const FCC_ACCURATE = 3
 
     Public Melder_debug As Long = 0
 
@@ -953,13 +963,574 @@ endoffor: If (Not formatChunkPresent) Then
         End Try
     End Function
 
+    Public Function Log2X(ByVal x As Double) As Double
+        Return Math.Log10(x) * NUMLog2E
+    End Function
+    Public Function exp(ByVal x As Double) As Double
+        Return Math.Pow(NUMEulersConstant, x)
+    End Function
+
+    Sub Sampled_shortTermAnalysis(ByRef mme As Sampled, ByVal windowDuration As Double, ByVal timeStep As Double, ByVal numberOfFrames As Long, ByVal firstTime As Double)
+        '!!!Melder_assert (windowDuration > 0.0);
+        '!!!Melder_assert (timeStep > 0.0);
+        Dim myDuration As Double = mme.dx * mme.nx
+        If (windowDuration > myDuration) Then
+            Console.WriteLine(": shorter than window length.")
+        End If
+        numberOfFrames = Math.Floor((myDuration - windowDuration) / timeStep) + 1
+        '!!!Melder_assert (*numberOfFrames >= 1);
+        Dim ourMidTime As Double = mme.x1 - 0.5 * mme.dx + 0.5 * myDuration
+        Dim thyDuration As Double = numberOfFrames * timeStep
+        firstTime = ourMidTime - 0.5 * thyDuration + 0.5 * timeStep
+    End Sub
+
+    Sub Pitch_pathFinder(ByRef mme As Pitch, ByVal silenceThreshold As Double, ByVal voicingThreshold As Double, ByVal octaveCost As Double, ByVal octaveJumpCost As Double, ByVal voicedUnvoicedCost As Double, ByVal ceiling As Double, ByVal pullFormants As Integer)
+        'TODO
+    End Sub
+
+    Sub drftb1(ByVal n As Long, ByRef c() As Double, ByRef ch() As Double, ByRef wa() As Double, ByRef ifac() As Long)
+        'TODO
+    End Sub
+    Sub drftf1(ByVal n As Long, ByRef c() As Double, ByRef ch() As Double, ByRef wa() As Double, ByRef ifac() As Long)
+        'TODO
+    End Sub
+    Sub NUMfft_backward(ByRef mme As NumFFTTable, ByRef data() As Double)
+        If (mme.n = 1) Then
+            Return
+        End If
+        Dim tr2() As Double = New Double(mme.trigcache.Length - mme.n + 1) {}
+        Dim i As Integer = mme.n
+        Dim j As Integer = 0
+        While i < mme.trigcache.Length
+            tr2(j) = mme.trigcache(i)
+            j += 1
+            i += 1
+        End While
+
+        drftb1(mme.n, data, mme.trigcache, tr2, mme.splitcache)
+    End Sub
+    Sub NUMfft_forward(ByRef mme As NumFFTTable, ByRef data() As Double)
+        If (mme.n = 1) Then
+            Return
+        End If
+        Dim tr2() As Double = New Double(mme.trigcache.Length - mme.n + 1) {}
+        Dim i As Integer = mme.n
+        Dim j As Integer = 0
+        While i < mme.trigcache.Length
+            tr2(j) = mme.trigcache(i)
+            j += 1
+            i += 1
+        End While
+
+        drftf1(mme.n, data, mme.trigcache, tr2, mme.splitcache)
+    End Sub
     Function Sound_to_Pitch_any(ByRef mme As Sound,
     ByVal dt As Double, ByVal minimumPitch As Double, ByVal periodsPerWindow As Double, ByVal maxnCandidates As Integer,
     ByVal method As Integer,
     ByVal silenceThreshold As Double, ByVal voicingThreshold As Double,
     ByVal octaveCost As Double, ByVal octaveJumpCost As Double, ByVal voicedUnvoicedCost As Double, ByVal ceiling As Double) As Pitch
-        'TODO
-        Return Nothing
+        Try
+            Dim fftTable As NumFFTTable = New NumFFTTable(1)
+            Dim duration, t1 As Double
+            '/* Window length in seconds. */
+            Dim dt_window As Double
+            '/* Number of samples per window. */
+            Dim nsamp_window, halfnsamp_window As Long
+            Dim nFrames, minimumLag, maximumLag As Long
+            Dim iframe, nsampFFT As Long
+            Dim interpolation_depth As Double
+            '/* Number of samples in longest period. */
+            Dim nsamp_period, halfnsamp_period As Long
+            Dim brent_ixmax, brent_depth As Long
+            '/* Obsolete. */
+            Dim brent_accuracy As Double
+            Dim globalPeak As Double
+            'nFrames = 0
+
+            '!!!Melder_assert (maxnCandidates >= 2);
+            '!!!Melder_assert (method >= AC_HANNING && method <= FCC_ACCURATE);
+
+            If (maxnCandidates < ceiling / minimumPitch) Then
+                maxnCandidates = ceiling / minimumPitch
+            End If
+            '   /* e.g. 3 periods, 75 Hz: 10 milliseconds. */
+            If (dt <= 0.0) Then
+                dt = periodsPerWindow / minimumPitch / 4.0
+            End If
+
+            Select Case method
+                Case AC_HANNING
+                    brent_depth = NUM_PEAK_INTERPOLATE_SINC70
+                    brent_accuracy = 0.0000001
+                    interpolation_depth = 0.5
+                    GoTo enofselect
+                Case AC_GAUSS
+                    '   /* Because Gaussian window is twice as long. */
+                    periodsPerWindow *= 2
+                    brent_depth = NUM_PEAK_INTERPOLATE_SINC700
+                    brent_accuracy = 0.00000000001
+                    ';   /* Because Gaussian window is twice as long. */
+                    interpolation_depth = 0.25
+                    GoTo enofselect
+                Case FCC_NORMAL
+                    brent_depth = NUM_PEAK_INTERPOLATE_SINC70
+                    brent_accuracy = 0.0000001
+                    interpolation_depth = 1.0
+                    GoTo enofselect
+                Case FCC_ACCURATE
+                    brent_depth = NUM_PEAK_INTERPOLATE_SINC700
+                    brent_accuracy = 0.00000000001
+                    interpolation_depth = 1.0
+                    GoTo enofselect
+            End Select
+enofselect: duration = mme.dx * mme.nx
+            If (minimumPitch < periodsPerWindow / duration) Then
+                'Melder_throw ("To analyse this Sound, ", L_LEFT_DOUBLE_QUOTE, "minimum pitch", L_RIGHT_DOUBLE_QUOTE, " must not be less than ", periodsPerWindow / duration, " Hz.");
+                Console.WriteLine("To analyse this Sound minimum pitch must not be less than" + periodsPerWindow / duration + " Hz.")
+                Return Nothing
+            End If
+
+            '/*
+            ' * Determine the number of samples in the longest period.
+            ' * We need this to compute the local mean of the sound (looking one period in both directions),
+            ' * and to compute the local peak of the sound (looking half a period in both directions).
+            ' */
+            nsamp_period = Math.Floor(1 / mme.dx / minimumPitch)
+            halfnsamp_period = nsamp_period / 2 + 1
+
+            If (ceiling > 0.5 / mme.dx) Then
+                ceiling = 0.5 / mme.dx
+            End If
+
+            '/*
+            ' * Determine window length in seconds and in samples.
+            ' */
+            dt_window = periodsPerWindow / minimumPitch
+            nsamp_window = Math.Floor(dt_window / mme.dx)
+            halfnsamp_window = nsamp_window / 2 - 1
+            If (halfnsamp_window < 2) Then
+                'Melder_throw("Analysis window too short.")
+                Console.WriteLine("Analysis window too short.")
+                Return Nothing
+            End If
+            nsamp_window = halfnsamp_window * 2
+
+            '/*
+            ' * Determine the minimum and maximum lags.
+            ' */
+            minimumLag = Math.Floor(1 / mme.dx / ceiling)
+            If (minimumLag < 2) Then
+                minimumLag = 2
+            End If
+            maximumLag = Math.Floor(nsamp_window / periodsPerWindow) + 2
+            If (maximumLag > nsamp_window) Then
+                maximumLag = nsamp_window
+            End If
+
+            '/*
+            ' * Determine the number of frames.
+            ' * Fit as many frames as possible symmetrically in the total duration.
+            ' * We do this even for the forward cross-correlation method,
+            ' * because that allows us to compare the two methods.
+            ' */
+            Try
+                Dim v As Double
+                If method >= FCC_NORMAL Then
+                    v = 1 / minimumPitch + dt_window
+                Else
+                    v = dt_window
+                End If
+                Sampled_shortTermAnalysis(mme, v, dt, nFrames, t1)
+            Catch ex As Exception
+                'Melder_throw ("The pitch analysis would give zero pitch frames.");
+            End Try
+
+            '/*
+            ' * Create the resulting pitch contour.
+            ' */
+            Dim thee As Pitch = New Pitch(mme.xmin, mme.xmax, nFrames, dt, t1, ceiling, maxnCandidates)
+
+            '/*
+            ' * Compute the global absolute peak for determination of silence threshold.
+            ' */
+            globalPeak = 0.0
+            For channel As Long = 0 To mme.ny - 1 Step 1
+                Dim mean As Double = 0.0
+                For i As Long = 0 To mme.nx - 1 Step 1
+                    mean += mme.z(channel, i)
+                Next
+                mean /= mme.nx
+                For i As Long = 0 To mme.nx - 1 Step 1
+                    Dim value As Double = Math.Abs(mme.z(channel, i) - mean)
+                    If (value > globalPeak) Then
+                        globalPeak = value
+                    End If
+                Next
+            Next
+            If (globalPeak = 0.0) Then
+                Return thee
+            End If
+
+            Dim frame(,) As Double
+            Dim ac(), window(), windowR() As Double
+            ac = New Double() {}
+            window = New Double() {}
+            windowR = New Double() {}
+            Dim secondRes As Integer
+            If (method >= FCC_NORMAL) Then
+                '/* For cross-correlation analysis. */
+                '/*
+                '* Create buffer for cross-correlation analysis.
+                '*/
+                frame = New Double(mme.ny, nsamp_window) {}
+                'frame.reset(1, mme.ny, 1, nsamp_window)
+                secondRes = nsamp_window
+                brent_ixmax = nsamp_window * interpolation_depth
+
+            Else
+                '/* For autocorrelation analysis. */
+
+                '/*
+                '* Compute the number of samples needed for doing FFT.
+                '* To avoid edge effects, we have to append zeroes to the window.
+                '* The maximum lag considered for maxima is maximumLag.
+                '* The maximum lag used in interpolation is nsamp_window * interpolation_depth.
+                '*/
+                nsampFFT = 1
+                While (nsampFFT < nsamp_window * (1 + interpolation_depth))
+                    nsampFFT *= 2
+                End While
+
+                '/*
+                '* Create buffers for autocorrelation analysis.
+                '*/
+                frame = New Double(mme.ny, nsampFFT) {}
+                secondRes = nsampFFT
+                ReDim windowR(nsampFFT)
+                ReDim window(nsamp_window)
+                ReDim ac(nsampFFT)
+                fftTable = New NumFFTTable(nsampFFT)
+
+
+                '/*
+                '* A Gaussian or Hanning window is applied against phase effects.
+                '* The Hanning window is 2 to 5 dB better for 3 periods/window.
+                '* The Gaussian window is 25 to 29 dB better for 6 periods/window.
+                '*/
+                If (method = AC_GAUSS) Then
+                    '/* Gaussian window. */
+                    Dim imid As Double = 0.5 * (nsamp_window + 1), edge = exp(-12.0)
+                    For i As Long = 0 To nsamp_window - 1 Step 1
+                        window(i) = (exp(-48.0 * (i - imid) * (i - imid) / (nsamp_window + 1) / (nsamp_window + 1)) - edge) / (1 - edge)
+                    Next
+                Else
+                    '// Hanning window
+                    For i As Long = 0 To nsamp_window - 1 Step 1
+                        window(i) = 0.5 - 0.5 * Math.Cos(i * 2 * Math.PI / (nsamp_window + 1))
+                    Next
+                End If
+
+                '/*
+                '* Compute the normalized autocorrelation of the window.
+                '*/
+                For i As Long = 0 To nsamp_window - 1 Step 1
+                    windowR(i) = window(i)
+                Next
+                NUMfft_forward(fftTable, windowR)
+                '// DC component
+                windowR(0) *= windowR(0)
+                For i As Long = 2 To nsampFFT - 1 Step 2
+                    windowR(i) = windowR(i) * windowR(i) + windowR(i + 1) * windowR(i + 1)
+                    '// power spectrum: square and zero
+                    windowR(i + 1) = 0.0
+                Next
+                '   // Nyquist frequency
+                windowR(nsampFFT) *= windowR(nsampFFT)
+                '// autocorrelation
+                NUMfft_backward(fftTable, windowR)
+                '// normalize
+                For i As Long = 1 To nsamp_window - 1 Step 1
+                    windowR(i) /= windowR(0)
+                Next
+
+                '   // normalize
+                windowR(0) = 1.0
+
+                brent_ixmax = nsamp_window * interpolation_depth
+            End If
+
+            'autoNUMvector <double> r (- nsamp_window, nsamp_window)
+            Dim r(2 * nsamp_window) As Double
+            Dim imax(maxnCandidates) As Long
+            'autoNUMvector <double> localMean (1, mme.ny)
+            Dim localMean(mme.ny) As Double
+
+            'autoMelderProgress progress (L"Sound to Pitch...");
+
+            For iframe = 0 To nFrames - 1 Step 1
+                Dim pitchFrame As Pitch_Frame = thee.frame(iframe)
+                Dim t As Double = Sampled_indexToX(thee, iframe), localPeak
+                Dim leftSample As Long = Sampled_xToLowIndex(mme, t), rightSample = leftSample + 1
+                Dim startSample, endSample As Long
+                'Melder_progress (0.1 + (0.8 * iframe) / (nFrames + 1),
+                '	L"Sound to Pitch: analysis of frame ", Melder_integer (iframe), L" out of ", Melder_integer (nFrames));
+
+                For channel As Long = 0 To mme.ny - 1 Step 1
+                    '/*
+                    ' * Compute the local mean; look one longest period to both sides.
+                    ' */
+                    startSample = rightSample - nsamp_period
+                    endSample = leftSample + nsamp_period
+                    '!!!Melder_assert(startSample >= 1)
+                    '!!!Melder_assert(endSample <= mme.nx)
+                    localMean(channel) = 0.0
+                    For i As Long = startSample - 1 To endSample - 1 Step 1
+                        localMean(channel) += mme.z(channel, i)
+                    Next
+                    localMean(channel) /= 2 * nsamp_period
+
+                    '/*
+                    ' * Copy a window to a frame and subtract the local mean.
+                    ' * We are going to kill the DC component before windowing.
+                    ' */
+                    startSample = rightSample - halfnsamp_window
+                    endSample = leftSample + halfnsamp_window
+                    'Melder_assert(startSample >= 1)
+                    'Melder_assert(endSample <= mme.nx)
+                    If (method < FCC_NORMAL) Then
+                        Dim ii As Long = startSample - 1
+                        For j As Long = 0 To nsamp_window - 1 Step 1
+                            frame(channel, j) = (mme.z(channel, ii) - localMean(channel)) * window(j)
+                            ii += 1
+                        Next
+                        For j As Long = nsamp_window To nsampFFT - 1 Step 1
+                            frame(channel, j) = 0.0
+                        Next
+                    Else
+                        Dim ii As Long = startSample - 1
+                        For j As Long = 0 To nsamp_window - 1 Step 1
+                            frame(channel, j) = mme.z(channel, ii) - localMean(channel)
+                            ii += 1
+                        Next
+                    End If
+                Next
+
+                '/*
+                ' * Compute the local peak; look half a longest period to both sides.
+                ' */
+                localPeak = 0.0
+                If ((startSample = halfnsamp_window + 1 - halfnsamp_period) < 1) Then
+                    startSample = 0
+                End If
+                If ((endSample = halfnsamp_window + halfnsamp_period) > nsamp_window) Then
+                    endSample = nsamp_window - 1
+                End If
+                For channel As Long = 0 To mme.ny - 1 Step 1
+                    For j As Long = startSample To endSample Step 1
+                        Dim value As Double = Math.Abs(frame(channel, j))
+                        If (value > localPeak) Then
+                            localPeak = value
+                        End If
+                    Next
+                Next
+                If localPeak > globalPeak Then
+                    pitchFrame.intensity = 1.0
+                Else
+                    pitchFrame.intensity = localPeak / globalPeak
+                End If
+                '/*
+                ' * Compute the correlation into the array 'r'.
+                ' */
+                If (method >= FCC_NORMAL) Then
+                    Dim startTime As Double = t - 0.5 * (1.0 / minimumPitch + dt_window)
+                    Dim localSpan As Long = maximumLag + nsamp_window, localMaximumLag, offset
+                    If ((startSample = Sampled_xToLowIndex(mme, startTime)) < 1) Then
+                        startSample = 1
+                    End If
+                    If (localSpan > mme.nx + 1 - startSample) Then
+                        localSpan = mme.nx + 1 - startSample
+                    End If
+                    localMaximumLag = localSpan - nsamp_window
+                    offset = startSample - 1
+                    Dim sumx2 As Double = 0
+                    '/* Sum of squares. */
+                    For channel As Long = 0 To mme.ny - 1 Step 1
+                        'double *amp = my z [channel] + offset;
+                        Dim ampIndex As Double = channel + offset
+                        For i As Long = 0 To nsamp_window Step 1
+                            Dim x As Double = mme.z(ampIndex + i, 0) - localMean(channel)
+                            sumx2 += x * x
+                        Next
+                    Next
+                    '/* At zero lag, these are still equal. */
+                    Dim sumy2 As Double = sumx2
+                    r(0) = 1.0
+                    For i As Long = 1 To localMaximumLag Step 1
+                        Dim product As Double = 0.0
+                        For channel As Long = 0 To mme.ny Step 1
+                            Dim ampIndex As Long = channel + offset
+                            Dim y0 As Double = mme.z(ampIndex + i, 0) - localMean(channel)
+                            Dim yZ As Double = mme.z(ampIndex + i + nsamp_window, 0) - localMean(channel)
+                            sumy2 += yZ * yZ - y0 * y0
+                            For j As Long = 1 To nsamp_window Step 1
+                                Dim x As Double = mme.z(ampIndex + j, 0) - localMean(channel)
+                                Dim y As Double = mme.z(ampIndex + i + j, 0) - localMean(channel)
+                                product += x * y
+                            Next
+                        Next
+                        r(-i) = r(i) = product / Math.Sqrt(sumx2 * sumy2)
+                    Next
+                Else
+
+                    '/*
+                    ' * The FFT of the autocorrelation is the power spectrum.
+                    ' */
+                    For i As Long = 0 To nsampFFT - 1 Step 1
+                        ac(i) = 0.0
+                    Next
+                    For channel As Long = 0 To mme.ny - 1 Step 1
+                        '/* Complex spectrum. */
+                        Dim chd() As Double = New Double(secondRes) {}
+                        Dim ttt As Integer = 0
+                        While ttt < secondRes
+                            chd(ttt) = frame(channel, ttt)
+                            ttt += 1
+                        End While
+
+                        NUMfft_forward(fftTable, chd)
+                        ' /* DC component. */
+                        ac(0) += frame(channel, 0) * frame(channel, 0)
+                        For i As Long = 1 To nsampFFT - 2 Step 2
+                            '/* Power spectrum. */
+                            ac(i) += frame(channel, i) * frame(channel, i) + frame(channel, i + 1) * frame(channel, i + 1)
+                        Next
+                        ' /* Nyquist frequency. */
+                        ac(nsampFFT) += frame(channel, nsampFFT) * frame(channel, nsampFFT)
+                    Next
+                    '/* Autocorrelation. */
+                    NUMfft_backward(fftTable, ac)
+
+                    '/*
+                    ' * Normalize the autocorrelation to the value with zero lag,
+                    ' * and divide it by the normalized autocorrelation of the window.
+                    ' */
+                    r(0) = 1.0
+                    For i As Long = 0 To brent_ixmax - 1 Step 1
+                        r(-i) = r(i) = ac(i + 1) / (ac(0) * windowR(i + 1))
+                    Next
+                End If
+                '/*
+                ' * Create (too much) space for candidates.
+                ' */
+                pitchFrame.reinit(maxnCandidates)
+
+                '/*
+                ' * Register the first candidate, which is always present: voicelessness.
+                ' */
+                pitchFrame.nCandidates = 1
+                pitchFrame.candidates(0).frequency = 0.0
+                '/* Voiceless: always present. */
+                pitchFrame.candidates(0).strength = 0.0
+
+                '/*
+                ' * Shortcut: absolute silence is always voiceless.
+                ' * Go to next frame.
+                ' */
+                If (localPeak = 0) Then
+                    Continue For
+                End If
+
+                '/*
+                ' * Find the strongest maxima of the correlation of this frame, 
+                ' * and register them as candidates.
+                ' */
+                imax(0) = 0
+                For i As Long = 2 To maximumLag - 1 And i < brent_ixmax Step 1
+                    '/* Not too unvoiced? */
+                    ' /* Maximum? */
+                    If (r(i) > 0.5 * voicingThreshold And r(i) > r(i - 1) And r(i) >= r(i + 1)) Then
+                        Dim place As Integer = 0
+
+                        '/*
+                        ' * Use parabolic interpolation for first estimate of frequency,
+                        ' * and sin(x)/x interpolation to compute the strength of this frequency.
+                        ' */
+                        Dim dr As Double = 0.5 * (r(i + 1) - r(i - 1)), d2r = 2 * r(i) - r(i - 1) - r(i + 1)
+                        Dim frequencyOfMaximum As Double = 1 / mme.dx / (i + dr / d2r)
+                        Dim offset As Long = -brent_ixmax - 1
+                        '/* method & 1 ? */
+                        Dim strengthOfMaximum As Double = NUM_interpolate_sinc(mme.z, r(offset), brent_ixmax - offset, 1 / mme.dx / frequencyOfMaximum - offset, 30)
+                        '/* : r [i] + 0.5 * dr * dr / d2r */;
+                        '	/* High values due to short windows are to be reflected around 1. */
+                        If (strengthOfMaximum > 1.0) Then
+                            strengthOfMaximum = 1.0 / strengthOfMaximum
+                        End If
+
+                        '/*
+                        ' * Find a place for this maximum.
+                        ' */
+                        If (pitchFrame.nCandidates < thee.maxCandidates) Then
+                            '/* Is there still a free place? */
+                            place = ++pitchFrame.nCandidates
+                        Else
+                            '/* Try the place of the weakest candidate so far. */
+                            Dim weakest As Double = 2
+                            For iweak As Integer = 2 To thee.maxCandidates Step 1
+                                '/* High frequencies are to be favoured */
+                                '/* if we want to analyze a perfectly periodic signal correctly. */
+                                Dim localStrength As Double = pitchFrame.candidates(iweak).strength - octaveCost * Log2X(minimumPitch / pitchFrame.candidates(iweak).frequency)
+                                If (localStrength < weakest) Then
+                                    weakest = localStrength
+                                    place = iweak
+                                End If
+                            Next
+                            '/* If this maximum is weaker than the weakest candidate so far, give it no place. */
+                            If (strengthOfMaximum - octaveCost * Log2X(minimumPitch / frequencyOfMaximum) <= weakest) Then
+                                place = 0
+                            End If
+                        End If
+                        If (place) Then
+                            '/* Have we found a place for this candidate? */
+                            pitchFrame.candidates(place).frequency = frequencyOfMaximum
+                            pitchFrame.candidates(place).strength = strengthOfMaximum
+                            imax(place) = i
+                        End If
+                    End If
+                Next
+
+                '/*
+                ' * Second pass: for extra precision, maximize sin(x)/x interpolation ('sinc').
+                ' */
+                For i As Long = 2 To pitchFrame.nCandidates Step 1
+                    If (method <> AC_HANNING Or pitchFrame.candidates(i).frequency > 0.0 / mme.dx) Then
+                        Dim xmid, ymid As Double
+                        Dim offset As Long = -brent_ixmax - 1
+                        Dim vv As Double
+                        If pitchFrame.candidates(i).frequency > 0.3 / mme.dx Then
+                            vv = NUM_PEAK_INTERPOLATE_SINC700
+                        Else
+                            vv = brent_depth
+                        End If
+                        ymid = NUMimproveMaximum(mme.z, r(offset), brent_ixmax - offset, imax(i) - offset, vv, xmid)
+                        xmid += offset
+                        pitchFrame.candidates(i).frequency = 1.0 / mme.dx / xmid
+                        If (ymid > 1.0) Then
+                            ymid = 1.0 / ymid
+                        End If
+                        pitchFrame.candidates(i).strength = ymid
+                    End If
+                Next
+            Next
+            ' /* Next frame. */
+            '// progress (0.95, L"Sound to Pitch: path finder");
+            'Melder_progress (0.95, L"Sound to Pitch: path finder");   
+            Pitch_pathFinder(thee, silenceThreshold, voicingThreshold, octaveCost, octaveJumpCost, voicedUnvoicedCost, ceiling, False)
+
+            Return thee
+        Catch ex As Exception
+            'Melder_throw (me, ": pitch analysis not performed.");
+            Return Nothing
+        End Try
     End Function
 
     Function Sound_to_Pitch_ac(ByRef mme As Sound,
@@ -1110,8 +1681,98 @@ endoffor: If (Not formatChunkPresent) Then
     End Function
 
     Function findExtremum_3(ByRef mme As Sound, ByVal channel1_index As Long, ByVal channel2_index As Long, ByVal d As Long, ByVal n As Long, ByVal includeMaxima As Integer, ByVal includeMinima As Integer) As Double
-        'TODO
-        Return 0
+        Dim channel1 As Long = channel1_index + d
+        Dim channel2 As Long
+        If channel2_index < 0 Then
+            channel2 = channel2_index
+        Else
+            channel2 = channel2_index + d
+        End If
+        Dim includeAll As Integer
+        If includeMaxima = includeMinima Then
+            includeAll = 1
+        Else
+            includeAll = 0
+        End If
+        Dim imin As Long = 1, imax = 1, i, iextr
+        Dim minimum, maximum As Double
+        If (n < 3) Then
+            '/* Outside. */
+            If (n <= 0) Then
+                Return 0.0
+            End If
+        ElseIf (n = 1) Then
+            Return 1.0
+        Else
+            '/* n == 2 */
+            Dim x1 As Double = mme.z(channel1, 0)
+            Dim x2 As Double = mme.z(channel1 + 1, 0)
+            Dim xleft As Double
+            Dim xright As Double
+            If includeAll Then
+                xleft = Math.Abs(x1)
+                xright = Math.Abs(x2)
+            Else
+                If includeMaxima Then
+                    xleft = x1
+                    xright = x2
+                Else
+                    xleft = -x1
+                    xright = -x2
+                End If
+            End If
+
+            If (xleft > xright) Then
+                Return 1.0
+            ElseIf (xleft < xright) Then
+                Return 2.0
+            Else
+                Return 1.5
+            End If
+        End If
+        minimum = maximum = mme.z(channel1, 0)
+        For i = 2 To n Step 1
+            Dim value As Double = mme.z(channel1 + i, 0)
+            If (value < minimum) Then
+                minimum = value
+                imin = i
+            End If
+            If (value > maximum) Then
+                maximum = value
+                imax = i
+            End If
+        Next
+        If (minimum = maximum) Then
+            '/* All equal. */
+            Return 0.5 * (n + 1.0)
+        End If
+        If includeAll Then
+            If Math.Abs(minimum) > Math.Abs(maximum) Then
+                iextr = imin
+            Else
+                iextr = imax
+            End If
+        Else
+            If includeMaxima Then
+                iextr = imax
+            Else
+                iextr = imin
+            End If
+        End If
+        'iextr = includeAll ? ( fabs (minimum) > fabs (maximum) ? imin : imax ) : includeMaxima ? imax : imin
+        If (iextr = 1) Then
+            Return 1.0
+        End If
+        If (iextr = n) Then
+            Return Convert.ToDouble(n)
+        End If
+
+        '/* Parabolic interpolation. */
+        '/* We do NOT need fabs here: we look for a genuine extremum. */
+        Dim valueMid As Double = mme.z(channel1 + iextr, 0)
+        Dim valueLeft As Double = mme.z(channel1 + iextr - 1, 0)
+        Dim valueRight As Double = mme.z(channel1 + iextr + 1, 0)
+        Return iextr + 0.5 * (valueRight - valueLeft) / (2 * valueMid - valueLeft - valueRight)
     End Function
 
     Function Sound_findExtremum(ByRef mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal includeMaxima As Integer, ByVal includeMinima As Integer) As Double
@@ -1196,9 +1857,147 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return 1
     End Function
 
+    Function improve_evaluate(ByVal x As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer) As Double
+        'struct improve_params *me = (struct improve_params *) closure;
+        Dim y As Double = NUM_interpolate_sinc(z, channel, nx, x, depth)
+        If isMaximum Then
+            Return -y
+        Else
+            Return y
+        End If
+    End Function
+
     Function NUMminimize_brent(ByVal a As Double, ByVal b As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer, ByVal tol As Double, ByVal fx As Double) As Double
-        'TODO
-        Return 0
+        Dim x, v, fv, w, fw As Double
+        Dim golden As Double = 1 - NUM_goldenSection
+        Dim sqrt_epsilon As Double = Math.Sqrt(Double.Epsilon) '(NUMfpp -> eps)
+        Dim itermax As Long = 60
+
+        '!!!Melder_assert (tol > 0 && a < b);
+        If Not (tol > 0 And a < b) Then
+            Console.WriteLine("Cannot continue process: (tol > 0 And a < b) ")
+            Return NUMundefined
+        End If
+
+        '/* First step - golden section */
+
+        v = a + golden * (b - a)
+        fv = improve_evaluate(v, z, channel, depth, nx, isMaximum)
+        x = v
+        w = v
+        fx = fv
+        fw = fv
+
+        For iter As Long = 1 To itermax Step 1
+            Dim range As Double = b - a
+            Dim middle_range As Double = (a + b) / 2
+            Dim tol_act As Double = sqrt_epsilon * Math.Abs(x) + tol / 3
+            Dim new_step As Double '/* Step at this iteration */
+
+
+
+            If (Math.Abs(x - middle_range) + range / 2 <= 2 * tol_act) Then
+                Return x
+            End If
+
+            '/* Obtain the golden section step */
+
+            If (x < middle_range) Then
+                new_step = b - x
+            Else
+                new_step = a - x
+            End If
+            new_step = golden * new_step
+
+            '/* Decide if the parabolic interpolation can be tried	*/
+
+            If (Math.Abs(x - w) >= tol_act) Then
+                '/*
+                '	Interpolation step is calculated as p/q;
+                '	division operation is delayed until last moment.
+                '*/
+
+                Dim p, q, t1 As Double
+
+                t1 = (x - w) * (fx - fv)
+                q = (x - v) * (fx - fw)
+                p = (x - v) * q - (x - w) * t1
+                q = 2 * (q - t1)
+
+                If (q > 0) Then
+                    p = -p
+                Else
+                    q = -q
+                End If
+
+                '/*
+                '	If x+p/q falls in [a,b], not too close to a and b,
+                '	and isn't too large, it is accepted.
+                '	If p/q is too large then the golden section procedure can
+                '	reduce [a,b] range.
+                '*/
+
+                If (Math.Abs(p) < Math.Abs(new_step * q) And p > q * (a - x + 2 * tol_act) And p < q * (b - x - 2 * tol_act)) Then
+                    new_step = p / q
+                End If
+            End If
+
+            '/* Adjust the step to be not less than tolerance. */
+
+            If (Math.Abs(new_step) < tol_act) Then
+                If new_step > 0 Then
+                    new_step = tol_act
+                Else
+                    new_step = -tol_act
+                End If
+            End If
+
+            '/* Obtain the next approximation to min	and reduce the enveloping range */
+
+            Dim t As Double = x + new_step '	/* Tentative point for the min	*/
+            Dim ft As Double
+            ft = fv = improve_evaluate(t, z, channel, depth, nx, isMaximum)
+
+            '/*
+            '	If t is a better approximation, reduce the range so that
+            '	t would fall within it. If x remains the best, reduce the range
+            '	so that x falls within it.
+            '*/
+
+            If (ft <= fx) Then
+                If (t < x) Then
+                    b = x
+                Else
+                    a = x
+                End If
+
+                v = w
+                w = x
+                x = t
+
+                fv = fw
+                fw = fx
+                fx = ft
+            Else
+                If (t < x) Then
+                    a = t
+                Else
+                    b = t
+                End If
+
+                If (ft <= fw Or w = x) Then
+                    v = w
+                    w = t
+                    fv = fw
+                    fw = ft
+                ElseIf (ft <= fv Or v = x Or v = w) Then
+                    v = t
+                    fv = ft
+                End If
+            End If
+        Next
+        'Melder_warning (L"NUMminimize_brent: maximum number of iterations (", Melder_integer (itermax), L") exceeded.");
+        Return x
     End Function
 
     Function NUMimproveExtremum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByVal ixmid_real As Double, ByVal isMaximum As Integer) As Double
