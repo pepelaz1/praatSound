@@ -275,7 +275,7 @@
             Return fright
         End If
         If (tleft = tright) Then
-            '/* Unusual, but possible; no preference. */
+            '/* Unusual, but possible no preference. */
             Return 0.5 * (fleft + fright)
         End If
         ' /* Linear interpolation. */
@@ -584,7 +584,7 @@ endofswitch:
         If (Melder_debug <> 18) Then
             Dim s As Short
             s = reader.ReadInt16()
-            'if (fread (& s, sizeof (signed short), 1, f) != 1) Then 
+            'if (fread (& s, sizeof (signed short), 1, f) <> 1) Then 
             ' readError(f, "a signed short integer.")
             ' End If
             Return Convert.ToInt32(s)
@@ -605,7 +605,7 @@ endofswitch:
         If (Melder_debug <> 18) Then
             Dim l As Long
             l = reader.ReadUInt32()
-            'if (fread (& l, sizeof (long), 1, f) != 1) Then
+            'if (fread (& l, sizeof (long), 1, f) <> 1) Then
             ' Console.WriteLine("Error reading a signed long integer.")
             'End If
             Return l
@@ -787,10 +787,10 @@ endofswitch:
                 If (numberOfBitsPerSamplePoint = 0) Then
                     numberOfBitsPerSamplePoint = 16
                 ElseIf (numberOfBitsPerSamplePoint < 4) Then
-                    Console.WriteLine("Too few bits per sample (" + numberOfBitsPerSamplePoint + "; the minimum is 4).")
+                    Console.WriteLine("Too few bits per sample (" + numberOfBitsPerSamplePoint + " the minimum is 4).")
                     Return
                 ElseIf (numberOfBitsPerSamplePoint > 32) Then
-                    Console.WriteLine("Too few bits per sample (" + numberOfBitsPerSamplePoint + "; the maximum is 32).")
+                    Console.WriteLine("Too few bits per sample (" + numberOfBitsPerSamplePoint + " the maximum is 32).")
                     Return
                 End If
                 Select Case winEncoding
@@ -846,7 +846,7 @@ endofswitch:    If (chunkSize And 1) Then
                         chunkSize = chunkSize + 1
                     End If
                     If (chunkSize < 0) Then
-                        '// incorrect data chunk (sometimes -44); assume that the data run till the end of the file
+                        '// incorrect data chunk (sometimes -44) assume that the data run till the end of the file
                         reader.BaseStream.Seek(0, System.IO.SeekOrigin.End)
                         Dim endOfData As Long = reader.BaseStream.Position
                         dataChunkSize = chunkSize = endOfData - startOfData
@@ -934,7 +934,7 @@ endoffor: If (Not formatChunkPresent) Then
     End Function
     Public Function Sound_readFromSoundFile(ByVal filePath As String) As Sound
         Try
-            ' autoMelderFile mfile = MelderFile_open (file);
+            ' autoMelderFile mfile = MelderFile_open (file)
             Dim reader = New System.IO.BinaryReader(System.IO.File.Open(filePath, System.IO.FileMode.Open))
             Dim numberOfChannels, encoding As Integer
             Dim sampleRate As Double
@@ -971,58 +971,1456 @@ endoffor: If (Not formatChunkPresent) Then
     End Function
 
     Sub Sampled_shortTermAnalysis(ByRef mme As Sampled, ByVal windowDuration As Double, ByVal timeStep As Double, ByVal numberOfFrames As Long, ByVal firstTime As Double)
-        '!!!Melder_assert (windowDuration > 0.0);
-        '!!!Melder_assert (timeStep > 0.0);
+        '!!!Melder_assert (windowDuration > 0.0)
+        '!!!Melder_assert (timeStep > 0.0)
         Dim myDuration As Double = mme.dx * mme.nx
         If (windowDuration > myDuration) Then
             Console.WriteLine(": shorter than window length.")
         End If
         numberOfFrames = Math.Floor((myDuration - windowDuration) / timeStep) + 1
-        '!!!Melder_assert (*numberOfFrames >= 1);
+        '!!!Melder_assert (*numberOfFrames >= 1)
         Dim ourMidTime As Double = mme.x1 - 0.5 * mme.dx + 0.5 * myDuration
         Dim thyDuration As Double = numberOfFrames * timeStep
         firstTime = ourMidTime - 0.5 * thyDuration + 0.5 * timeStep
     End Sub
 
     Sub Pitch_pathFinder(ByRef mme As Pitch, ByVal silenceThreshold As Double, ByVal voicingThreshold As Double, ByVal octaveCost As Double, ByVal octaveJumpCost As Double, ByVal voicedUnvoicedCost As Double, ByVal ceiling As Double, ByVal pullFormants As Integer)
-        'TODO
+        '      if (Melder_debug == 33) Melder_casual ("Pitch path finder:\nSilence threshold = %g\nVoicing threshold = %g\nOctave cost = %g\nOctave jump cost = %g\n"
+        '"Voiced/unvoiced cost = %g\nCeiling = %g\nPull formants = %d", silenceThreshold, voicingThreshold, octaveCost, octaveJumpCost, voicedUnvoicedCost,
+        'ceiling, pullFormants);
+        Try
+            Dim maxnCandidates As Long = mme.maxCandidates
+            Dim place As Long
+            Dim maximum, value As Double
+            Dim ceiling2 As Double
+            If pullFormants Then
+                ceiling2 = 2 * ceiling
+            Else
+                ceiling = ceiling
+            End If
+            '/* Next three lines 20011015 */
+            Dim timeStepCorrection As Double = 0.01 / mme.dx
+            octaveJumpCost *= timeStepCorrection
+            voicedUnvoicedCost *= timeStepCorrection
+
+            mme.ceiling = ceiling
+            Dim delta(mme.nx, maxnCandidates) As Double
+            Dim psi(mme.nx, maxnCandidates) As Long
+
+            For iframe As Long = 0 To mme.nx - 1 Step 1
+                Dim frame As Pitch_Frame = mme.frame(iframe)
+                Dim unvoicedStrength As Double
+                If silenceThreshold <= 0 Then
+                    unvoicedStrength = 0
+                Else
+                    unvoicedStrength = frame.intensity / (silenceThreshold / (1 + voicingThreshold))
+                End If
+                If unvoicedStrength > 0 Then
+                    unvoicedStrength = voicingThreshold + unvoicedStrength
+                Else
+                    unvoicedStrength = voicingThreshold
+                End If
+                For icand As Long = 0 To frame.nCandidates - 1 Step 1
+                    Dim candidate As PitchCandidate = frame.candidates(icand)
+                    Dim voiceless As Integer
+                    If candidate.frequency = 0 Then
+                        voiceless = candidate.frequency
+                    Else
+                        voiceless = ceiling2
+                    End If
+                    If voiceless Then
+                        delta(iframe, icand) = unvoicedStrength
+                    Else
+                        delta(iframe, icand) = candidate.strength - octaveCost * Log2X(ceiling / candidate.frequency)
+                    End If
+                Next
+            Next
+
+            '/* Look for the most probable path through the maxima. */
+            '/* There is a cost for the voiced/unvoiced transition, */
+            '/* and a cost for a frequency jump. */
+
+            For iframe As Long = 1 To mme.nx - 1 Step 1
+                Dim prevFrame As Pitch_Frame = mme.frame(iframe - 1), curFrame = mme.frame(iframe)
+                'double *prevDelta = delta [iframe - 1], *curDelta = delta [iframe]
+                'long *curPsi = psi [iframe]
+                For icand2 As Long = 0 To curFrame.nCandidates Step 1
+                    Dim f2 As Double = curFrame.candidates(icand2).frequency
+                    maximum = -1.0E+30
+                    place = 0
+                    For icand1 As Long = 0 To prevFrame.nCandidates - 1 Step 1
+                        Dim f1 As Double = prevFrame.candidates(icand1).frequency
+                        Dim transitionCost As Double
+                        Dim previousVoiceless As Boolean = f1 <= 0 Or f1 >= ceiling2
+                        Dim currentVoiceless As Boolean = f2 <= 0 Or f2 >= ceiling2
+                        If (currentVoiceless) Then
+                            If (previousVoiceless) Then
+                                transitionCost = 0
+                                '// both voiceless
+                            Else
+                                transitionCost = voicedUnvoicedCost
+                                '// voiced-to-unvoiced transition
+                            End If
+                        Else
+                            If (previousVoiceless) Then
+                                transitionCost = voicedUnvoicedCost
+                                '// unvoiced-to-voiced transition
+                            Else
+                                transitionCost = octaveJumpCost * Math.Abs(Log2X(f1 / f2))
+                                '   // both voiced
+                            End If
+                        End If
+                        value = delta(iframe - 1, icand1) - transitionCost + delta(iframe, icand2)
+                        '//if (Melder_debug == 33) Melder_casual ("Frame %ld, current candidate %ld (delta %g), previous candidate %ld (delta %g), "
+                        '//	"transition cost %g, value %g, maximum %g", iframe, icand2, curDelta [icand2], icand1, prevDelta [icand1], transitionCost, value, maximum);
+                        If (value > maximum) Then
+                            maximum = value
+                            place = icand1
+
+                            'Else
+                            'if (value == maximum) {
+                            'if (Melder_debug == 33) Melder_casual ("A tie in frame %ld, current candidate %ld, previous candidate %ld", iframe, icand2, icand1);
+                            '}
+                        End If
+                        delta(iframe, icand2) = maximum
+                        psi(iframe, icand2) = place
+                    Next
+                Next
+
+                '/* Find the end of the most probable path. */
+
+                place = 1
+                maximum = delta(mme.nx - 1, place)
+                For icand As Long = 2 To mme.frame(mme.nx - 1).nCandidates Step 1
+                    If (delta(mme.nx - 1, icand) > maximum) Then
+                        place = icand
+                        maximum = delta(mme.nx - 1, place)
+                    End If
+                Next
+            Next
+
+            '/* Backtracking: follow the path backwards. */
+
+            For iframe = mme.nx - 1 To 0 Step -1
+                'if (Melder_debug == 33) Melder_casual ("Frame %ld: swapping candidates 1 and %ld", iframe, place);
+                Dim frame As Pitch_Frame = mme.frame(iframe)
+                Dim help As PitchCandidate = frame.candidates(0)
+                frame.candidates(0) = frame.candidates(place)
+                frame.candidates(place) = help
+                place = psi(iframe, place)
+                '// This assignment is challenging to CodeWarrior 11.
+            Next
+
+            '/* Pull formants: devoice frames with frequencies between ceiling and ceiling2. */
+
+            If (ceiling2 > ceiling) Then
+                'if (Melder_debug == 33) Melder_casual ("Pulling formants...");
+                For iframe As Long = mme.nx - 1 To 0 Step -1
+                    Dim frame As Pitch_Frame = mme.frame(iframe)
+                    Dim winner As PitchCandidate = frame.candidates(0)
+                    Dim f As Double = winner.frequency
+                    If (f > ceiling And f <= ceiling2) Then
+                        For icand As Long = 1 To frame.nCandidates - 1 Step 1
+                            Dim loser As PitchCandidate = frame.candidates(icand)
+                            If (loser.frequency = 0.0) Then
+                                Dim help As PitchCandidate = winner
+                                winner = loser
+                                loser = help
+                                GoTo endoffor
+                            End If
+                        Next
+endoffor:           End If
+                Next
+            End If
+        Catch ex As Exception
+            'Melder_throw (me, ": path not found.");
+        End Try
+    End Sub
+    Sub dradb2(ByVal ido As Long, ByVal l1 As Long, ByRef cc() As Double, ByRef ch() As Double, ByRef wa1() As Double, ByVal wa1Index As Long)
+        'wa1Index - index at wa1
+        Dim i, k, t0, t1, t2, t3, t4, t5, t6 As Long
+        Dim ti2, tr2 As Double
+
+        t0 = l1 * ido
+
+        t1 = 0
+        t2 = 0
+        t3 = (ido << 1) - 1
+        For k = 0 To l1 - 1 Step 1
+
+            ch(t1) = cc(t2) + cc(t3 + t2)
+            ch(t1 + t0) = cc(t2) - cc(t3 + t2)
+            t2 = t1 << 1
+            t1 += ido
+        Next
+
+        If (ido < 2) Then
+            Return
+        End If
+        If (ido = 2) Then
+            GoTo L105
+        End If
+
+        t1 = 0
+        t2 = 0
+        For k = 0 To l1 - 1 Step 1
+            t3 = t1
+            t5 = (t4 = t2) + (ido << 1)
+            t6 = t0 + t1
+            For i = 2 To ido - 1 Step 2
+
+                t3 += 2
+                t4 += 2
+                t5 -= 2
+                t6 += 2
+                ch(t3 - 1) = cc(t4 - 1) + cc(t5 - 1)
+                tr2 = cc(t4 - 1) - cc(t5 - 1)
+                ch(t3) = cc(t4) - cc(t5)
+                ti2 = cc(t4) + cc(t5)
+                ch(t6 - 1) = wa1(wa1Index + i - 2) * tr2 - wa1(wa1Index + i - 1) * ti2
+                ch(t6) = wa1(wa1Index + i - 2) * ti2 + wa1(wa1Index + i - 1) * tr2
+            Next
+            t2 = t1 << 1
+            t1 += ido
+        Next
+
+        If (ido Mod 2 = 1) Then
+            Return
+        End If
+
+L105:
+        t1 = ido - 1
+        t2 = ido - 1
+        For k = 0 To l1 - 1 Step 1
+
+            ch(t1) = cc(t2) + cc(t2)
+            ch(t1 + t0) = -(cc(t2 + 1) + cc(t2 + 1))
+            t1 += ido
+            t2 += ido << 1
+        Next
+    End Sub
+    Sub dradf2(ByVal ido As Long, ByVal l1 As Long, ByRef cc() As Double, ByRef ch() As Double, ByRef wa1() As Double, ByVal wa1Index As Long)
+
+        'wa1Index - index at wa1
+
+        Dim i, k As Long
+        Dim ti2, tr2 As Double
+        Dim t0, t1, t2, t3, t4, t5, t6 As Long
+
+        t1 = 0
+        t0 = (t2 = l1 * ido)
+        t3 = ido << 1
+        For k = 0 To l1 - 1 Step 1
+
+            ch(t1 << 1) = cc(t1) + cc(t2)
+            ch((t1 << 1) + t3 - 1) = cc(t1) - cc(t2)
+            t1 += ido
+            t2 += ido
+        Next
+
+        If (ido < 2) Then
+            Return
+        End If
+        If (ido = 2) Then
+            GoTo L105
+        End If
+
+        t1 = 0
+        t2 = t0
+        For k = 0 To l1 - 1 Step 1
+
+            t3 = t2
+            t4 = (t1 << 1) + (ido << 1)
+            t5 = t1
+            t6 = t1 + t1
+            For i = 2 To ido - 1 Step 2
+
+                t3 += 2
+                t4 -= 2
+                t5 += 2
+                t6 += 2
+                tr2 = wa1(wa1Index + i - 2) * cc(t3 - 1) + wa1(wa1Index + i - 1) * cc(t3)
+                ti2 = wa1(wa1Index + i - 2) * cc(t3) - wa1(wa1Index + i - 1) * cc(t3 - 1)
+                ch(t6) = cc(t5) + ti2
+                ch(t4) = ti2 - cc(t5)
+                ch(t6 - 1) = cc(t5 - 1) + tr2
+                ch(t4 - 1) = cc(t5 - 1) - tr2
+            Next
+            t1 += ido
+            t2 += ido
+        Next
+
+        If (ido Mod 2 = 1) Then
+            Return
+        End If
+
+L105:
+        t3 = (t2 = (t1 = ido) - 1)
+        t2 += t0
+        For k = 0 To l1 - 1 Step 1
+
+            ch(t1) = -cc(t2)
+            ch(t1 - 1) = cc(t3)
+            t1 += ido << 1
+            t2 += ido
+            t3 += ido
+        Next
+    End Sub
+    Sub dradb3(ByVal ido As Long, ByVal l1 As Long, ByRef cc() As Double, ByRef ch() As Double, ByRef wa1() As Double, ByVal wa1Index As Long, ByVal wa2Index As Long)
+
+        'wa1Index, wa2Index = indexes at wa1
+        Dim taur As Double = -0.5
+        Dim taui As Double = 0.8660254037844386
+        Dim i, k, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10 As Long
+        Dim ci2, ci3, di2, di3, cr2, cr3, dr2, dr3, ti2, tr2 As Double
+
+        t0 = l1 * ido
+
+        t1 = 0
+        t2 = t0 << 1
+        t3 = ido << 1
+        t4 = ido + (ido << 1)
+        t5 = 0
+        For k = 0 To l1 - 1 Step 1
+
+            tr2 = cc(t3 - 1) + cc(t3 - 1)
+            cr2 = cc(t5) + (taur * tr2)
+            ch(t1) = cc(t5) + tr2
+            ci3 = taui * (cc(t3) + cc(t3))
+            ch(t1 + t0) = cr2 - ci3
+            ch(t1 + t2) = cr2 + ci3
+            t1 += ido
+            t3 += t4
+            t5 += t4
+        Next
+
+        If (ido = 1) Then
+            Return
+        End If
+
+        t1 = 0
+        t3 = ido << 1
+        For k = 0 To l1 - 1 Step 1
+
+            t7 = t1 + (t1 << 1)
+            t6 = (t5 = t7 + t3)
+            t8 = t1
+            t10 = (t9 = t1 + t0) + t0
+
+            For i = 2 To ido - 1 Step 2
+
+                t5 += 2
+                t6 -= 2
+                t7 += 2
+                t8 += 2
+                t9 += 2
+                t10 += 2
+                tr2 = cc(t5 - 1) + cc(t6 - 1)
+                cr2 = cc(t7 - 1) + (taur * tr2)
+                ch(t8 - 1) = cc(t7 - 1) + tr2
+                ti2 = cc(t5) - cc(t6)
+                ci2 = cc(t7) + (taur * ti2)
+                ch(t8) = cc(t7) + ti2
+                cr3 = taui * (cc(t5 - 1) - cc(t6 - 1))
+                ci3 = taui * (cc(t5) + cc(t6))
+                dr2 = cr2 - ci3
+                dr3 = cr2 + ci3
+                di2 = ci2 + cr3
+                di3 = ci2 - cr3
+                ch(t9 - 1) = wa1(wa1Index + i - 2) * dr2 - wa1(wa1Index + i - 1) * di2
+                ch(t9) = wa1(wa1Index + i - 2) * di2 + wa1(wa1Index + i - 1) * dr2
+                ch(t10 - 1) = wa1(wa2Index + i - 2) * dr3 - wa1(wa2Index + i - 1) * di3
+                ch(t10) = wa1(wa2Index + i - 2) * di3 + wa1(wa2Index + i - 1) * dr3
+            Next
+            t1 += ido
+        Next
+    End Sub
+    Sub dradb4(ByVal ido As Long, ByVal l1 As Long, ByRef cc() As Double, ByRef ch() As Double, ByRef wa1() As Double, ByVal wa1Index As Long, ByVal wa2Index As Long, ByVal wa3Index As Long)
+        'wa1Index,wa2Index,wa3Index - indexes at wa1
+        Dim sqrt2 As Double = Math.Sqrt(2)
+        Dim i, k, t0, t1, t2, t3, t4, t5, t6, t7, t8 As Long
+        Dim ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4 As Double
+
+        t0 = l1 * ido
+
+        t1 = 0
+        t2 = ido << 2
+        t3 = 0
+        t6 = ido << 1
+        For k = 0 To l1 - 1 Step 1
+
+            t4 = t3 + t6
+            t5 = t1
+            tr3 = cc(t4 - 1) + cc(t4 - 1)
+            tr4 = cc(t4) + cc(t4)
+            tr1 = cc(t3) - cc(t4 - 1)
+            t4 += t6
+            tr2 = cc(t3) + cc(t4 - 1)
+            ch(t5) = tr2 + tr3
+            ch(t5) = tr1 - tr4
+            t5 += t0
+            ch(t5) = tr2 - tr3
+            t5 += t0
+            ch(t5) = tr1 + tr4
+            t5 += t0
+            t1 += ido
+            t3 += t2
+        Next
+
+        If (ido < 2) Then
+            Return
+        End If
+        If (ido = 2) Then
+            GoTo L105
+        End If
+
+        t1 = 0
+        For k = 0 To l1 - 1 Step 1
+            t5 = (t4 = (t3 = (t2 = t1 << 2) + t6)) + t6
+            t7 = t1
+            For i = 2 To ido Step 2
+                t2 += 2
+                t3 += 2
+                t4 -= 2
+                t5 -= 2
+                t7 += 2
+                ti1 = cc(t2) + cc(t5)
+                ti2 = cc(t2) - cc(t5)
+                ti3 = cc(t3) - cc(t4)
+                tr4 = cc(t3) + cc(t4)
+                tr1 = cc(t2 - 1) - cc(t5 - 1)
+                tr2 = cc(t2 - 1) + cc(t5 - 1)
+                ti4 = cc(t3 - 1) - cc(t4 - 1)
+                tr3 = cc(t3 - 1) + cc(t4 - 1)
+                ch(t7 - 1) = tr2 + tr3
+                cr3 = tr2 - tr3
+                ch(t7) = ti2 + ti3
+                ci3 = ti2 - ti3
+                cr2 = tr1 - tr4
+                cr4 = tr1 + tr4
+                ci2 = ti1 + ti4
+                ci4 = ti1 - ti4
+
+                ch((t8 = t7 + t0) - 1) = wa1(wa1Index + i - 2) * cr2 - wa1(wa1Index + i - 1) * ci2
+                ch(t8) = wa1(wa1Index + i - 2) * ci2 + wa1(wa1Index + i - 1) * cr2
+                ch(t8 - 1) = wa1(wa2Index + i - 2) * cr3 - wa1(wa2Index + i - 1) * ci3
+                t8 += t0
+                ch(t8) = wa1(wa2Index + i - 2) * ci3 + wa1(wa2Index + i - 1) * cr3
+                ch(t8 - 1) = wa1(wa3Index + i - 2) * cr4 - wa1(wa3Index + i - 1) * ci4
+                t8 += t0
+                ch(t8) = wa1(wa3Index + i - 2) * ci4 + wa1(wa3Index + i - 1) * cr4
+            Next
+            t1 += ido
+        Next
+
+        If (ido Mod 2 = 1) Then
+            Return
+        End If
+
+L105:
+
+        t1 = ido
+        t2 = ido << 2
+        t3 = ido - 1
+        t4 = ido + (ido << 1)
+        For k = 0 To l1 - 1 Step 1
+
+            t5 = t3
+            ti1 = cc(t1) + cc(t4)
+            ti2 = cc(t4) - cc(t1)
+            tr1 = cc(t1 - 1) - cc(t4 - 1)
+            tr2 = cc(t1 - 1) + cc(t4 - 1)
+            ch(t5) = tr2 + tr2
+            ch(t5) = sqrt2 * (tr1 - ti1)
+            t5 += t0
+            ch(t5) = ti2 + ti2
+            t5 += t0
+            ch(t5) = -sqrt2 * (tr1 + ti1)
+            t5 += t0
+            t3 += ido
+            t1 += t2
+            t4 += t2
+        Next
+    End Sub
+    Sub dradf4(ByVal ido As Long, ByVal l1 As Long, ByRef cc() As Double, ByRef ch() As Double, ByRef wa1() As Double, ByVal wa1Index As Long, ByVal wa2Index As Long, ByVal wa3Index As Long)
+        'wa1Index,wa2Index,wa3Index - indexes at wa1
+
+        Dim hsqt2 As Double = Math.Sqrt(2) / 2
+        Dim i, k, t0, t1, t2, t3, t4, t5, t6 As Long
+        Dim ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4 As Double
+
+        t0 = l1 * ido
+
+        t1 = t0
+        t4 = t1 << 1
+        t2 = t1 + (t1 << 1)
+        t3 = 0
+
+        For k = 0 To l1 - 1 Step 1
+
+            tr1 = cc(t1) + cc(t2)
+            tr2 = cc(t3) + cc(t4)
+            ch(t5 = t3 << 2) = tr1 + tr2
+            ch((ido << 2) + t5 - 1) = tr2 - tr1
+            ch(t5 - 1) = cc(t3) - cc(t4)
+            t5 += (ido << 1)
+            ch(t5) = cc(t2) - cc(t1)
+
+            t1 += ido
+            t2 += ido
+            t3 += ido
+            t4 += ido
+        Next
+
+        If (ido < 2) Then
+            Return
+        End If
+        If (ido = 2) Then
+            GoTo L105
+        End If
+
+        t1 = 0
+        For k = 0 To l1 - 1 Step 1
+
+            t2 = t1
+            t4 = t1 << 2
+            t5 = (t6 = ido << 1) + t4
+            For i = 2 To ido - 1 Step 2
+                t3 = t2
+                t2 += 2
+                t4 += 2
+                t5 -= 2
+
+                t3 += t0
+                cr2 = wa1(wa1Index + i - 2) * cc(t3 - 1) + wa1(wa1Index + i - 1) * cc(t3)
+                ci2 = wa1(wa1Index + i - 2) * cc(t3) - wa1(wa1Index + i - 1) * cc(t3 - 1)
+                t3 += t0
+                cr3 = wa1(wa2Index + i - 2) * cc(t3 - 1) + wa1(wa2Index + i - 1) * cc(t3)
+                ci3 = wa1(wa2Index + i - 2) * cc(t3) - wa1(wa2Index + i - 1) * cc(t3 - 1)
+                t3 += t0
+                cr4 = wa1(wa3Index + i - 2) * cc(t3 - 1) + wa1(wa3Index + i - 1) * cc(t3)
+                ci4 = wa1(wa3Index + i - 2) * cc(t3) - wa1(wa3Index + i - 1) * cc(t3 - 1)
+
+                tr1 = cr2 + cr4
+                tr4 = cr4 - cr2
+                ti1 = ci2 + ci4
+                ti4 = ci2 - ci4
+                ti2 = cc(t2) + ci3
+                ti3 = cc(t2) - ci3
+                tr2 = cc(t2 - 1) + cr3
+                tr3 = cc(t2 - 1) - cr3
+
+                ch(t4 - 1) = tr1 + tr2
+                ch(t4) = ti1 + ti2
+
+                ch(t5 - 1) = tr3 - ti4
+                ch(t5) = tr4 - ti3
+
+                ch(t4 + t6 - 1) = ti4 + tr3
+                ch(t4 + t6) = tr4 + ti3
+
+                ch(t5 + t6 - 1) = tr2 - tr1
+                ch(t5 + t6) = ti1 - ti2
+            Next
+            t1 += ido
+        Next
+        If (ido Mod 2 = 1) Then
+            Return
+        End If
+
+L105:
+
+        t2 = (t1 = t0 + ido - 1) + (t0 << 1)
+        t3 = ido << 2
+        t4 = ido
+        t5 = ido << 1
+        t6 = ido
+
+        For k = 0 To l1 - 1 Step 1
+
+            ti1 = -hsqt2 * (cc(t1) + cc(t2))
+            tr1 = hsqt2 * (cc(t1) - cc(t2))
+            ch(t4 - 1) = tr1 + cc(t6 - 1)
+            ch(t4 + t5 - 1) = cc(t6 - 1) - tr1
+            ch(t4) = ti1 - cc(t1 + t0)
+            ch(t4 + t5) = ti1 + cc(t1 + t0)
+            t1 += ido
+            t2 += ido
+            t4 += t3
+            t6 += ido
+        Next
+    End Sub
+    Sub dradbg(ByVal ido As Long, ByVal ip As Long, ByVal l1 As Long, ByVal idl1 As Long, ByRef cc() As Double, ByRef c1() As Double, ByRef c2() As Double, ByRef ch() As Double, ByRef ch2() As Double, ByRef wa() As Double, ByVal wa1Index As Long)
+
+        Dim tpi As Double = 2 * Math.PI
+        Dim idij, ipph, i, j, k, l, ik, is1, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12 As Long
+        Dim dc2, ai1, ai2, ar1, ar2, ds2 As Double
+        Dim nbd As Long
+        Dim dcp, arg, dsp, ar1h, ar2h As Double
+        Dim ipp2 As Long
+
+        t10 = ip * ido
+        t0 = l1 * ido
+        arg = tpi / Convert.ToDouble(ip)
+        dcp = Math.Cos(arg)
+        dsp = Math.Sin(arg)
+        nbd = (ido - 1) >> 1
+        ipp2 = ip
+        ipph = (ip + 1) >> 1
+        If (ido < l1) Then
+            GoTo L103
+        End If
+
+        t1 = 0
+        t2 = 0
+        For k = 0 To l1 - 1 Step 1
+            t3 = t1
+            t4 = t2
+            For i = 0 To ido - 1 Step 1
+
+                ch(t3) = cc(t4)
+                t3 += 1
+                t4 += 1
+            Next
+            t1 += ido
+            t2 += t10
+        Next
+        GoTo L106
+
+L103:
+        t1 = 0
+        For i = 0 To ido - 1 Step 1
+
+            t2 = t1
+            t3 = t1
+            For k = 0 To l1 Step 1
+
+                ch(t2) = cc(t3)
+                t2 += ido
+                t3 += t10
+            Next
+            t1 += 1
+        Next
+L106:
+        t1 = 0
+        t2 = ipp2 * t0
+        t7 = (t5 = ido << 1)
+        For j = 1 To ipph - 1 Step 1
+            t1 += t0
+            t2 -= t0
+            t3 = t1
+            t4 = t2
+            t6 = t5
+            For k = 0 To l1 - 1 Step 1
+                ch(t3) = cc(t6 - 1) + cc(t6 - 1)
+                ch(t4) = cc(t6) + cc(t6)
+                t3 += ido
+                t4 += ido
+                t6 += t10
+            Next
+            t5 += t7
+        Next
+
+        If (ido = 1) Then
+            GoTo L116
+        End If
+        If (nbd < l1) Then
+            GoTo L112
+        End If
+
+        t1 = 0
+        t2 = ipp2 * t0
+        t7 = 0
+        For j = 1 To ipph - 1 Step 1
+            t1 += t0
+            t2 -= t0
+            t3 = t1
+            t4 = t2
+
+            t7 += (ido << 1)
+            t8 = t7
+            For k = 0 To l1 - 1 Step 1
+                t5 = t3
+                t6 = t4
+                t9 = t8
+                t11 = t8
+                For i = 2 To ido - 1 Step 2
+                    t5 += 2
+                    t6 += 2
+                    t9 += 2
+                    t11 -= 2
+                    ch(t5 - 1) = cc(t9 - 1) + cc(t11 - 1)
+                    ch(t6 - 1) = cc(t9 - 1) - cc(t11 - 1)
+                    ch(t5) = cc(t9) - cc(t11)
+                    ch(t6) = cc(t9) + cc(t11)
+                Next
+                t3 += ido
+                t4 += ido
+                t8 += t10
+            Next
+        Next
+        GoTo L116
+
+L112:
+        t1 = 0
+        t2 = ipp2 * t0
+        t7 = 0
+        For j = 1 To ipph - 1 Step 1
+            t1 += t0
+            t2 -= t0
+            t3 = t1
+            t4 = t2
+            t7 += (ido << 1)
+            t8 = t7
+            t9 = t7
+            For i = 2 To ido - 1 Step 2
+                t3 += 2
+                t4 += 2
+                t8 += 2
+                t9 -= 2
+                t5 = t3
+                t6 = t4
+                t11 = t8
+                t12 = t9
+                For k = 0 To l1 - 1 Step 1
+                    ch(t5 - 1) = cc(t11 - 1) + cc(t12 - 1)
+                    ch(t6 - 1) = cc(t11 - 1) - cc(t12 - 1)
+                    ch(t5) = cc(t11) - cc(t12)
+                    ch(t6) = cc(t11) + cc(t12)
+                    t5 += ido
+                    t6 += ido
+                    t11 += t10
+                    t12 += t10
+                Next
+            Next
+        Next
+
+L116:
+        ar1 = 1.0
+        ai1 = 0.0
+        t1 = 0
+        t9 = (t2 = ipp2 * idl1)
+        t3 = (ip - 1) * idl1
+        For l = 1 To ipph - 1 Step 1
+            t1 += idl1
+            t2 -= idl1
+
+            ar1h = dcp * ar1 - dsp * ai1
+            ai1 = dcp * ai1 + dsp * ar1
+            ar1 = ar1h
+            t4 = t1
+            t5 = t2
+            t6 = 0
+            t7 = idl1
+            t8 = t3
+            For ik = 0 To idl1 - 1 Step 1
+                c2(t4) = ch2(t6) + ar1 * ch2(t7)
+                c2(t5) = ai1 * ch2(t8)
+                t4 += 1
+                t5 += 1
+                t6 += 1
+                t7 += 1
+                t8 += 1
+            Next
+            dc2 = ar1
+            ds2 = ai1
+            ar2 = ar1
+            ai2 = ai1
+
+            t6 = idl1
+            t7 = t9 - idl1
+            For j = 2 To ipph - 1 Step 1
+
+                t6 += idl1
+                t7 -= idl1
+                ar2h = dc2 * ar2 - ds2 * ai2
+                ai2 = dc2 * ai2 + ds2 * ar2
+                ar2 = ar2h
+                t4 = t1
+                t5 = t2
+                t11 = t6
+                t12 = t7
+                For ik = 0 To idl1 - 1 Step 1
+                    c2(t4) += ar2 * ch2(t11)
+                    c2(t5) += ai2 * ch2(t12)
+                    t4 += 1
+                    t5 += 1
+                    t11 += 1
+                    t12 += 1
+                Next
+            Next
+        Next
+
+        t1 = 0
+        For j = 1 To ipph - 1 Step 1
+
+            t1 += idl1
+            t2 = t1
+            For ik = 0 To idl1 Step 1
+                ch2(ik) += ch2(t2)
+                t2 += 1
+            Next
+        Next
+
+        t1 = 0
+        t2 = ipp2 * t0
+        For j = 1 To ipph - 1 Step 1
+
+            t1 += t0
+            t2 -= t0
+            t3 = t1
+            t4 = t2
+            For k = 0 To l1 - 1 Step 1
+                ch(t3) = c1(t3) - c1(t4)
+                ch(t4) = c1(t3) + c1(t4)
+                t3 += ido
+                t4 += ido
+            Next
+        Next
+
+        If (ido = 1) Then
+            GoTo L132
+        End If
+        If (nbd < l1) Then
+            GoTo L128
+        End If
+
+        t1 = 0
+        t2 = ipp2 * t0
+        For j = 1 To ipph - 1 Step 1
+            t1 += t0
+            t2 -= t0
+            t3 = t1
+            t4 = t2
+            For k = 0 To l1 - 1 Step 1
+                t5 = t3
+                t6 = t4
+                For i = 2 To ido - 1 Step 2
+                    t5 += 2
+                    t6 += 2
+                    ch(t5 - 1) = c1(t5 - 1) - c1(t6)
+                    ch(t6 - 1) = c1(t5 - 1) + c1(t6)
+                    ch(t5) = c1(t5) + c1(t6 - 1)
+                    ch(t6) = c1(t5) - c1(t6 - 1)
+                Next
+                t3 += ido
+                t4 += ido
+            Next
+        Next
+        GoTo L132
+
+L128:
+        t1 = 0
+        t2 = ipp2 * t0
+        For j = 1 To ipph - 1 Step 1
+            t1 += t0
+            t2 -= t0
+            t3 = t1
+            t4 = t2
+            For i = 2 To ido - 1 Step 2
+                t3 += 2
+                t4 += 2
+                t5 = t3
+                t6 = t4
+                For k = 0 To l1 - 1 Step 1
+                    ch(t5 - 1) = c1(t5 - 1) - c1(t6)
+                    ch(t6 - 1) = c1(t5 - 1) + c1(t6)
+                    ch(t5) = c1(t5) + c1(t6 - 1)
+                    ch(t6) = c1(t5) - c1(t6 - 1)
+                    t5 += ido
+                    t6 += ido
+                Next
+            Next
+        Next
+
+L132:
+        If (ido = 1) Then
+            Return
+        End If
+
+        For ik = 0 To idl1 - 1 Step 1
+            c2(ik) = ch2(ik)
+        Next
+
+        t1 = 0
+        For j = 1 To ip - 1 Step 1
+            t2 = t1
+            t1 += t0
+            For k = 0 To l1 - 1 Step 1
+                c1(t2) = ch(t2)
+                t2 += ido
+            Next
+        Next
+
+        If (nbd > l1) Then
+            GoTo L139
+        End If
+
+        is1 = -ido - 1
+        t1 = 0
+        For j = 1 To ip - 1 Step 1
+
+            is1 += ido
+            t1 += t0
+            idij = is1
+            t2 = t1
+            For i = 2 To ido - 1 Step 2
+
+                t2 += 2
+                idij += 2
+                t3 = t2
+                For k = 0 To l1 - 1 Step 1
+
+                    c1(t3 - 1) = wa(wa1Index + idij - 1) * ch(t3 - 1) - wa(wa1Index + idij) * ch(t3)
+                    c1(t3) = wa(wa1Index + idij - 1) * ch(t3) + wa(wa1Index + idij) * ch(t3 - 1)
+                    t3 += ido
+                Next
+            Next
+        Next
+        Return
+
+L139:
+        is1 = -ido - 1
+        t1 = 0
+        For j = 1 To ip - 1 Step 1
+
+            is1 += ido
+            t1 += t0
+            t2 = t1
+            For k = 0 To l1 - 1 Step 1
+
+                idij = is1
+                t3 = t2
+                For i = 2 To ido - 1 Step 2
+
+                    idij += 2
+                    t3 += 2
+                    c1(t3 - 1) = wa(wa1Index + idij - 1) * ch(t3 - 1) - wa(wa1Index + idij) * ch(t3)
+                    c1(t3) = wa(wa1Index + idij - 1) * ch(t3) + wa(wa1Index + idij) * ch(t3 - 1)
+                Next
+                t2 += ido
+            Next
+        Next
+    End Sub
+    Sub dradfg(ByVal ido As Long, ByVal ip As Long, ByVal l1 As Long, ByVal idl1 As Long, ByRef cc() As Double, ByRef c1() As Double, ByRef c2() As Double, ByRef ch() As Double, ByRef ch2() As Double, ByRef wa() As Double, ByVal wa1Index As Long)
+        Dim tpi As Double = 2 * Math.PI
+        Dim idij, ipph, i, j, k, l, ic, ik, is1 As Long
+        Dim t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10 As Long
+        Dim dc2, ai1, ai2, ar1, ar2, ds2 As Double
+        Dim nbd As Long
+        Dim dcp, arg, dsp, ar1h, ar2h As Double
+        Dim idp2, ipp2 As Long
+
+        arg = tpi / Convert.ToDouble(ip)
+        dcp = Math.Cos(arg)
+        dsp = Math.Sin(arg)
+        ipph = (ip + 1) >> 1
+        ipp2 = ip
+        idp2 = ido
+        nbd = (ido - 1) >> 1
+        t0 = l1 * ido
+        t10 = ip * ido
+
+        If (ido = 1) Then
+            GoTo L119
+        End If
+        For ik = 0 To idl1 - 1 Step 1
+            ch2(ik) = c2(ik)
+        Next
+
+        t1 = 0
+        For j = 1 To ip - 1 Step 1
+
+            t1 += t0
+            t2 = t1
+            For k = 0 To l1 - 1 Step 1
+                ch(t2) = c1(t2)
+                t2 += ido
+            Next
+        Next
+
+        is1 = -ido
+        t1 = 0
+        If (nbd > l1) Then
+            For j = 1 To ip - 1 Step 1
+
+                t1 += t0
+                is1 += ido
+                t2 = -ido + t1
+                For k = 0 To l1 - 1 Step 1
+
+                    idij = is1 - 1
+                    t2 += ido
+                    t3 = t2
+                    For i = 2 To ido - 1 Step 2
+
+                        idij += 2
+                        t3 += 2
+                        ch(t3 - 1) = wa(wa1Index + idij - 1) * c1(t3 - 1) + wa(wa1Index + idij) * c1(t3)
+                        ch(t3) = wa(wa1Index + idij - 1) * c1(t3) - wa(wa1Index + idij) * c1(t3 - 1)
+                    Next
+                Next
+            Next
+
+        Else
+
+            For j = 1 To ip - 1 Step 1
+                is1 += ido
+                idij = is1 - 1
+                t1 += t0
+                t2 = t1
+                For i = 2 To ido - 1 Step 2
+
+                    idij += 2
+                    t2 += 2
+                    t3 = t2
+                    For k = 0 To l1 - 1 Step 1
+                        ch(t3 - 1) = wa(wa1Index + idij - 1) * c1(t3 - 1) + wa(wa1Index + idij) * c1(t3)
+                        ch(t3) = wa(wa1Index + idij - 1) * c1(t3) - wa(wa1Index + idij) * c1(t3 - 1)
+                        t3 += ido
+                    Next
+                Next
+            Next
+        End If
+
+        t1 = 0
+        t2 = ipp2 * t0
+        If (nbd < l1) Then
+            For j = 1 To ipph - 1 Step 1
+                t1 += t0
+                t2 -= t0
+                t3 = t1
+                t4 = t2
+                For i = 2 To ido - 1 Step 2
+                    t3 += 2
+                    t4 += 2
+                    t5 = t3 - ido
+                    t6 = t4 - ido
+                    For k = 0 To l1 - 1 Step 1
+                        t5 += ido
+                        t6 += ido
+                        c1(t5 - 1) = ch(t5 - 1) + ch(t6 - 1)
+                        c1(t6 - 1) = ch(t5) - ch(t6)
+                        c1(t5) = ch(t5) + ch(t6)
+                        c1(t6) = ch(t6 - 1) - ch(t5 - 1)
+                    Next
+                Next
+            Next
+        Else
+            For j = 1 To ipph - 1 Step 1
+
+                t1 += t0
+                t2 -= t0
+                t3 = t1
+                t4 = t2
+                For k = 0 To l1 - 1 Step 1
+                    t5 = t3
+                    t6 = t4
+                    For i = 2 To ido - 1 Step 2
+                        t5 += 2
+                        t6 += 2
+                        c1(t5 - 1) = ch(t5 - 1) + ch(t6 - 1)
+                        c1(t6 - 1) = ch(t5) - ch(t6)
+                        c1(t5) = ch(t5) + ch(t6)
+                        c1(t6) = ch(t6 - 1) - ch(t5 - 1)
+                    Next
+                    t3 += ido
+                    t4 += ido
+                Next
+            Next
+        End If
+
+L119:
+        For ik = 0 To idl1 - 1 Step 1
+            c2(ik) = ch2(ik)
+        Next
+
+        t1 = 0
+        t2 = ipp2 * idl1
+        For j = 1 To ipph - 1 Step 1
+            t1 += t0
+            t2 -= t0
+            t3 = t1 - ido
+            t4 = t2 - ido
+            For k = 0 To l1 - 1 Step 1
+                t3 += ido
+                t4 += ido
+                c1(t3) = ch(t3) + ch(t4)
+                c1(t4) = ch(t4) - ch(t3)
+            Next
+        Next
+
+        ar1 = 1.0
+        ai1 = 0.0
+        t1 = 0
+        t2 = ipp2 * idl1
+        t3 = (ip - 1) * idl1
+        For l = 1 To ipph - 1 Step 1
+            t1 += idl1
+            t2 -= idl1
+            ar1h = dcp * ar1 - dsp * ai1
+            ai1 = dcp * ai1 + dsp * ar1
+            ar1 = ar1h
+            t4 = t1
+            t5 = t2
+            t6 = t3
+            t7 = idl1
+
+            For ik = 0 To idl1 - 1 Step 1
+
+                ch2(t4) = c2(ik) + ar1 * c2(t7)
+                t4 += 1
+                t7 += 1
+                ch2(t5) = ai1 * c2(t6)
+                t5 += 1
+                t6 += 1
+            Next
+
+            dc2 = ar1
+            ds2 = ai1
+            ar2 = ar1
+            ai2 = ai1
+
+            t4 = idl1
+            t5 = (ipp2 - 1) * idl1
+            For j = 2 To ipph - 1 Step 1
+                t4 += idl1
+                t5 -= idl1
+
+                ar2h = dc2 * ar2 - ds2 * ai2
+                ai2 = dc2 * ai2 + ds2 * ar2
+                ar2 = ar2h
+
+                t6 = t1
+                t7 = t2
+                t8 = t4
+                t9 = t5
+                For ik = 0 To idl1 - 1 Step 1
+
+                    ch2(t6) += ar2 * c2(t8)
+                    t6 += 1
+                    t8 += 1
+                    ch2(t7) += ai2 * c2(t9)
+                    t7 += 1
+                    t9 += 1
+                    t6 += 1
+                    t7 += 1
+                    t8 += 1
+                    t9 += 1
+                Next
+            Next
+        Next
+
+        t1 = 0
+        For j = 1 To ipph - 1 Step 1
+            t1 += idl1
+            t2 = t1
+            For ik = 0 To idl1 - 1 Step 1
+                ch2(ik) += c2(t2)
+                t2 += 1
+            Next
+        Next
+
+        If (ido < l1) Then
+            GoTo L132
+        End If
+
+        t1 = 0
+        t2 = 0
+        For k = 0 To l1 - 1 Step 1
+            t3 = t1
+            t4 = t2
+            For i = 0 To ido - 1 Step 1
+                cc(t4) = ch(t3)
+                t4 += 1
+                t3 += 1
+            Next
+            t1 += ido
+            t2 += t10
+        Next
+
+        GoTo L135
+
+L132:
+        For i = 0 To ido - 1 Step 1
+            t1 = i
+            t2 = i
+            For k = 0 To l1 - 1 Step 1
+
+                cc(t2) = ch(t1)
+                t1 += ido
+                t2 += t10
+            Next
+        Next
+
+L135:
+        t1 = 0
+        t2 = ido << 1
+        t3 = 0
+        t4 = ipp2 * t0
+        For j = 1 To ipph - 1 Step 1
+
+            t1 += t2
+            t3 += t0
+            t4 -= t0
+
+            t5 = t1
+            t6 = t3
+            t7 = t4
+
+            For k = 0 To l1 - 1 Step 1
+                cc(t5 - 1) = ch(t6)
+                cc(t5) = ch(t7)
+                t5 += t10
+                t6 += ido
+                t7 += ido
+            Next
+        Next
+
+        If (ido = 1) Then
+            Return
+        End If
+        If (nbd < l1) Then
+            GoTo L141
+        End If
+
+        t1 = -ido
+        t3 = 0
+        t4 = 0
+        t5 = ipp2 * t0
+        For j = 1 To ipph - 1 Step 1
+            t1 += t2
+            t3 += t2
+            t4 += t0
+            t5 -= t0
+            t6 = t1
+            t7 = t3
+            t8 = t4
+            t9 = t5
+            For k = 0 To l1 - 1 Step 1
+                For i = 2 To ido - 1 Step 2
+                    ic = idp2 - i
+                    cc(i + t7 - 1) = ch(i + t8 - 1) + ch(i + t9 - 1)
+                    cc(ic + t6 - 1) = ch(i + t8 - 1) - ch(i + t9 - 1)
+                    cc(i + t7) = ch(i + t8) + ch(i + t9)
+                    cc(ic + t6) = ch(i + t9) - ch(i + t8)
+                Next
+                t6 += t10
+                t7 += t10
+                t8 += ido
+                t9 += ido
+            Next
+        Next
+        Return
+
+L141:
+
+        t1 = -ido
+        t3 = 0
+        t4 = 0
+        t5 = ipp2 * t0
+        For j = 1 To ipph - 1 Step 1
+            t1 += t2
+            t3 += t2
+            t4 += t0
+            t5 -= t0
+            For i = 2 To ido - 1 Step 2
+                t6 = idp2 + t1 - i
+                t7 = i + t3
+                t8 = i + t4
+                t9 = i + t5
+                For k = 0 To l1 - 1 Step 1
+                    cc(t7 - 1) = ch(t8 - 1) + ch(t9 - 1)
+                    cc(t6 - 1) = ch(t8 - 1) - ch(t9 - 1)
+                    cc(t7) = ch(t8) + ch(t9)
+                    cc(t6) = ch(t9) - ch(t8)
+                    t6 += t10
+                    t7 += t10
+                    t8 += ido
+                    t9 += ido
+                Next
+            Next
+        Next
     End Sub
 
-    Sub drftb1(ByVal n As Long, ByRef c() As Double, ByRef ch() As Double, ByRef wa() As Double, ByRef ifac() As Long)
-        'TODO
+    Sub drftb1(ByVal n As Long, ByRef c() As Double, ByRef ch() As Double, ByVal waIndex As Long, ByRef ifac() As Long)
+        'wa = ch + waIndex
+        'wa + ix2 - 1 = ch + waIndex + ix2 - 1
+        'wa + iw - 1 = ch(waIndex + iw - 1)
+        Dim i, k1, l1, l2 As Long
+        Dim na As Long
+        Dim nf, ip, iw, ix2, ix3, ido, idl1 As Long
+
+        nf = ifac(1)
+        na = 0
+        l1 = 1
+        iw = 1
+
+        For k1 = 0 To nf - 1 Step 1
+            ip = ifac(k1 + 2)
+            l2 = ip * l1
+            ido = n / l2
+            idl1 = ido * l1
+            If (ip <> 4) Then
+                GoTo L103
+            End If
+            ix2 = iw + ido
+            ix3 = ix2 + ido
+
+            If (na <> 0) Then
+                dradb4(ido, l1, ch, c, ch, waIndex + iw - 1, waIndex + ix2 - 1, waIndex + ix3 - 1)
+            Else
+                dradb4(ido, l1, c, ch, ch, waIndex + iw - 1, waIndex + ix2 - 1, waIndex + ix3 - 1)
+            End If
+            na = 1 - na
+            GoTo L115
+
+L103:
+            If (ip <> 2) Then
+                GoTo L106
+            End If
+
+            If (na <> 0) Then
+                dradb2(ido, l1, ch, c, ch, waIndex + iw - 1)
+            Else
+                dradb2(ido, l1, c, ch, ch, waIndex + iw - 1)
+            End If
+            na = 1 - na
+            GoTo L115
+
+L106:
+            If (ip <> 3) Then
+                GoTo L109
+            End If
+
+            ix2 = iw + ido
+            If (na <> 0) Then
+                dradb3(ido, l1, ch, c, ch, waIndex + iw - 1, waIndex + ix2 - 1)
+            Else
+                dradb3(ido, l1, c, ch, ch, waIndex + iw - 1, waIndex + ix2 - 1)
+            End If
+            na = 1 - na
+            GoTo L115
+
+L109:
+            '/* The radix five case can be translated later..... */
+            '/* if(ip<>5)goto L112
+
+            '  ix2=iw+ido ix3=ix2+ido ix4=ix3+ido if(na<>0)
+            '  dradb5(ido,l1,ch,c,wa+iw-1,wa+ix2-1,wa+ix3-1,wa+ix4-1) else
+            '  dradb5(ido,l1,c,ch,wa+iw-1,wa+ix2-1,wa+ix3-1,wa+ix4-1) na=1-na
+            '   goto L115
+
+            '   L112: */
+            If (na <> 0) Then
+                dradbg(ido, ip, l1, idl1, ch, ch, ch, c, c, ch, waIndex + iw - 1)
+            Else
+                dradbg(ido, ip, l1, idl1, c, c, c, ch, ch, ch, waIndex + iw - 1)
+            End If
+            If (ido = 1) Then
+                na = 1 - na
+            End If
+
+L115:
+            l1 = l2
+            iw += (ip - 1) * ido
+        Next
+
+        If (na = 0) Then
+            Return
+        End If
+
+        For i = 0 To n - 1 Step 1
+            c(i) = ch(i)
+        Next
     End Sub
-    Sub drftf1(ByVal n As Long, ByRef c() As Double, ByRef ch() As Double, ByRef wa() As Double, ByRef ifac() As Long)
-        'TODO
+    Sub drftf1(ByVal n As Long, ByRef c() As Double, ByRef ch() As Double, ByVal waIndex As Long, ByRef ifac() As Long)
+        Dim i, k1, l1, l2 As Long
+        Dim na, kh, nf As Long
+        Dim ip, iw, ido, idl1, ix2, ix3 As Long
+
+        nf = ifac(1)
+        na = 1
+        l2 = n
+        iw = n
+
+        For k1 = 0 To nf - 1 Step 1
+
+            kh = nf - k1
+            ip = ifac(kh + 1)
+            l1 = l2 / ip
+            ido = n / l2
+            idl1 = ido * l1
+            iw -= (ip - 1) * ido
+            na = 1 - na
+
+            If (ip <> 4) Then
+                GoTo L102
+            End If
+
+            ix2 = iw + ido
+            ix3 = ix2 + ido
+            If (na <> 0) Then
+                dradf4(ido, l1, ch, c, ch, waIndex + iw - 1, waIndex + ix2 - 1, waIndex + ix3 - 1)
+            Else
+                dradf4(ido, l1, c, ch, ch, waIndex + iw - 1, waIndex + ix2 - 1, waIndex + ix3 - 1)
+            End If
+            GoTo L110
+
+L102:
+            If (ip <> 2) Then
+                GoTo L104
+            End If
+            If (na <> 0) Then
+                GoTo L103
+            End If
+
+            dradf2(ido, l1, c, ch, ch, waIndex + iw - 1)
+            GoTo L110
+
+L103:
+            dradf2(ido, l1, ch, c, ch, waIndex + iw - 1)
+            GoTo L110
+
+L104:
+            If (ido = 1) Then
+                na = 1 - na
+            End If
+            If (na <> 0) Then
+                GoTo L109
+            End If
+
+            dradfg(ido, ip, l1, idl1, c, c, c, ch, ch, ch, waIndex + iw - 1)
+            na = 1
+            GoTo L110
+
+L109:
+            dradfg(ido, ip, l1, idl1, ch, ch, ch, c, c, ch, waIndex + iw - 1)
+            na = 0
+
+L110:
+            l2 = l1
+        Next
+
+        If (na = 1) Then
+            Return
+        End If
+
+        For i = 0 To n - 1 Step 1
+            c(i) = ch(i)
+        Next
     End Sub
     Sub NUMfft_backward(ByRef mme As NumFFTTable, ByRef data() As Double)
         If (mme.n = 1) Then
             Return
         End If
-        Dim tr2() As Double = New Double(mme.trigcache.Length - mme.n + 1) {}
-        Dim i As Integer = mme.n
-        Dim j As Integer = 0
-        While i < mme.trigcache.Length
-            tr2(j) = mme.trigcache(i)
-            j += 1
-            i += 1
-        End While
-
-        drftb1(mme.n, data, mme.trigcache, tr2, mme.splitcache)
+        drftb1(mme.n, data, mme.trigcache, mme.n, mme.splitcache)
     End Sub
     Sub NUMfft_forward(ByRef mme As NumFFTTable, ByRef data() As Double)
         If (mme.n = 1) Then
             Return
         End If
-        Dim tr2() As Double = New Double(mme.trigcache.Length - mme.n + 1) {}
-        Dim i As Integer = mme.n
-        Dim j As Integer = 0
-        While i < mme.trigcache.Length
-            tr2(j) = mme.trigcache(i)
-            j += 1
-            i += 1
-        End While
-
-        drftf1(mme.n, data, mme.trigcache, tr2, mme.splitcache)
+        drftf1(mme.n, data, mme.trigcache, mme.n, mme.splitcache)
     End Sub
     Function Sound_to_Pitch_any(ByRef mme As Sound,
     ByVal dt As Double, ByVal minimumPitch As Double, ByVal periodsPerWindow As Double, ByVal maxnCandidates As Integer,
@@ -1047,8 +2445,8 @@ endoffor: If (Not formatChunkPresent) Then
             Dim globalPeak As Double
             'nFrames = 0
 
-            '!!!Melder_assert (maxnCandidates >= 2);
-            '!!!Melder_assert (method >= AC_HANNING && method <= FCC_ACCURATE);
+            '!!!Melder_assert (maxnCandidates >= 2)
+            '!!!Melder_assert (method >= AC_HANNING && method <= FCC_ACCURATE)
 
             If (maxnCandidates < ceiling / minimumPitch) Then
                 maxnCandidates = ceiling / minimumPitch
@@ -1069,7 +2467,7 @@ endoffor: If (Not formatChunkPresent) Then
                     periodsPerWindow *= 2
                     brent_depth = NUM_PEAK_INTERPOLATE_SINC700
                     brent_accuracy = 0.00000000001
-                    ';   /* Because Gaussian window is twice as long. */
+                    '   /* Because Gaussian window is twice as long. */
                     interpolation_depth = 0.25
                     GoTo enofselect
                 Case FCC_NORMAL
@@ -1085,7 +2483,7 @@ endoffor: If (Not formatChunkPresent) Then
             End Select
 enofselect: duration = mme.dx * mme.nx
             If (minimumPitch < periodsPerWindow / duration) Then
-                'Melder_throw ("To analyse this Sound, ", L_LEFT_DOUBLE_QUOTE, "minimum pitch", L_RIGHT_DOUBLE_QUOTE, " must not be less than ", periodsPerWindow / duration, " Hz.");
+                'Melder_throw ("To analyse this Sound, ", L_LEFT_DOUBLE_QUOTE, "minimum pitch", L_RIGHT_DOUBLE_QUOTE, " must not be less than ", periodsPerWindow / duration, " Hz.")
                 Console.WriteLine("To analyse this Sound minimum pitch must not be less than" + periodsPerWindow / duration + " Hz.")
                 Return Nothing
             End If
@@ -1142,7 +2540,7 @@ enofselect: duration = mme.dx * mme.nx
                 End If
                 Sampled_shortTermAnalysis(mme, v, dt, nFrames, t1)
             Catch ex As Exception
-                'Melder_throw ("The pitch analysis would give zero pitch frames.");
+                'Melder_throw ("The pitch analysis would give zero pitch frames.")
             End Try
 
             '/*
@@ -1265,7 +2663,7 @@ enofselect: duration = mme.dx * mme.nx
             'autoNUMvector <double> localMean (1, mme.ny)
             Dim localMean(mme.ny) As Double
 
-            'autoMelderProgress progress (L"Sound to Pitch...");
+            'autoMelderProgress progress (L"Sound to Pitch...")
 
             For iframe = 0 To nFrames - 1 Step 1
                 Dim pitchFrame As Pitch_Frame = thee.frame(iframe)
@@ -1273,11 +2671,11 @@ enofselect: duration = mme.dx * mme.nx
                 Dim leftSample As Long = Sampled_xToLowIndex(mme, t), rightSample = leftSample + 1
                 Dim startSample, endSample As Long
                 'Melder_progress (0.1 + (0.8 * iframe) / (nFrames + 1),
-                '	L"Sound to Pitch: analysis of frame ", Melder_integer (iframe), L" out of ", Melder_integer (nFrames));
+                '	L"Sound to Pitch: analysis of frame ", Melder_integer (iframe), L" out of ", Melder_integer (nFrames))
 
                 For channel As Long = 0 To mme.ny - 1 Step 1
                     '/*
-                    ' * Compute the local mean; look one longest period to both sides.
+                    ' * Compute the local mean look one longest period to both sides.
                     ' */
                     startSample = rightSample - nsamp_period
                     endSample = leftSample + nsamp_period
@@ -1316,7 +2714,7 @@ enofselect: duration = mme.dx * mme.nx
                 Next
 
                 '/*
-                ' * Compute the local peak; look half a longest period to both sides.
+                ' * Compute the local peak look half a longest period to both sides.
                 ' */
                 localPeak = 0.0
                 If ((startSample = halfnsamp_window + 1 - halfnsamp_period) < 1) Then
@@ -1355,7 +2753,7 @@ enofselect: duration = mme.dx * mme.nx
                     Dim sumx2 As Double = 0
                     '/* Sum of squares. */
                     For channel As Long = 0 To mme.ny - 1 Step 1
-                        'double *amp = my z [channel] + offset;
+                        'double *amp = my z [channel] + offset
                         Dim ampIndex As Double = channel + offset
                         For i As Long = 0 To nsamp_window Step 1
                             Dim x As Double = mme.z(ampIndex + i, 0) - localMean(channel)
@@ -1460,7 +2858,7 @@ enofselect: duration = mme.dx * mme.nx
                         Dim offset As Long = -brent_ixmax - 1
                         '/* method & 1 ? */
                         Dim strengthOfMaximum As Double = NUM_interpolate_sinc(mme.z, r(offset), brent_ixmax - offset, 1 / mme.dx / frequencyOfMaximum - offset, 30)
-                        '/* : r [i] + 0.5 * dr * dr / d2r */;
+                        '/* : r [i] + 0.5 * dr * dr / d2r */
                         '	/* High values due to short windows are to be reflected around 1. */
                         If (strengthOfMaximum > 1.0) Then
                             strengthOfMaximum = 1.0 / strengthOfMaximum
@@ -1522,13 +2920,13 @@ enofselect: duration = mme.dx * mme.nx
                 Next
             Next
             ' /* Next frame. */
-            '// progress (0.95, L"Sound to Pitch: path finder");
-            'Melder_progress (0.95, L"Sound to Pitch: path finder");   
+            '// progress (0.95, L"Sound to Pitch: path finder")
+            'Melder_progress (0.95, L"Sound to Pitch: path finder")   
             Pitch_pathFinder(thee, silenceThreshold, voicingThreshold, octaveCost, octaveJumpCost, voicedUnvoicedCost, ceiling, False)
 
             Return thee
         Catch ex As Exception
-            'Melder_throw (me, ": pitch analysis not performed.");
+            'Melder_throw (me, ": pitch analysis not performed.")
             Return Nothing
         End Try
     End Function
@@ -1858,7 +3256,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
     End Function
 
     Function improve_evaluate(ByVal x As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer) As Double
-        'struct improve_params *me = (struct improve_params *) closure;
+        'struct improve_params *me = (struct improve_params *) closure
         Dim y As Double = NUM_interpolate_sinc(z, channel, nx, x, depth)
         If isMaximum Then
             Return -y
@@ -1873,7 +3271,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Dim sqrt_epsilon As Double = Math.Sqrt(Double.Epsilon) '(NUMfpp -> eps)
         Dim itermax As Long = 60
 
-        '!!!Melder_assert (tol > 0 && a < b);
+        '!!!Melder_assert (tol > 0 && a < b)
         If Not (tol > 0 And a < b) Then
             Console.WriteLine("Cannot continue process: (tol > 0 And a < b) ")
             Return NUMundefined
@@ -1913,7 +3311,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
 
             If (Math.Abs(x - w) >= tol_act) Then
                 '/*
-                '	Interpolation step is calculated as p/q;
+                '	Interpolation step is calculated as p/q
                 '	division operation is delayed until last moment.
                 '*/
 
@@ -1996,12 +3394,12 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
                 End If
             End If
         Next
-        'Melder_warning (L"NUMminimize_brent: maximum number of iterations (", Melder_integer (itermax), L") exceeded.");
+        'Melder_warning (L"NUMminimize_brent: maximum number of iterations (", Melder_integer (itermax), L") exceeded.")
         Return x
     End Function
 
     Function NUMimproveExtremum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByVal ixmid_real As Double, ByVal isMaximum As Integer) As Double
-        '!!! struct improve_params params;
+        '!!! struct improve_params params
         Dim result As Double
         If (ixmid <= 1) Then
             ixmid_real = 1
@@ -2163,7 +3561,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
     End Function
     Sub Vector_getMaximumAndX(ByRef mme As Vector, xmin As Double, xmax As Double, channel As Long, interpolation As Integer, ByVal return_maximum As Double, return_xOfMaximum As Double)
         Dim n As Long = mme.nx, imin = 0, imax = 0, i
-        '!!!Melder_assert (channel >= 1 && channel <= my ny);
+        '!!!Melder_assert (channel >= 1 && channel <= my ny)
         'double *y = my z [channel]
         Dim maximum, x As Double
         If (xmax <= xmin) Then
@@ -2237,7 +3635,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
 
     Sub Vector_getMinimumAndX(ByRef mme As Vector, xmin As Double, xmax As Double, channel As Long, interpolation As Integer, ByVal return_minimum As Double, return_xOfMinimum As Double)
         Dim n As Long = mme.nx, imin = 0, imax = 0
-        '!!!Melder_assert (channel >= 1 && channel <= my ny);
+        '!!!Melder_assert (channel >= 1 && channel <= my ny)
         'double *y = my z [channel]
         Dim minimum, x As Double
         If (xmax <= xmin) Then
@@ -2379,7 +3777,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
             '/*
             ' * Cycle over all voiced intervals.
             '*/
-            'autoMelderProgress progress (L"Sound & Pitch: To PointProcess...");
+            'autoMelderProgress progress (L"Sound & Pitch: To PointProcess...")
             While 1 = 1
                 Dim tleft, tright As Double
                 If (Not Pitch_getVoicedIntervalAfter(pitch, t, tleft, tright)) Then
