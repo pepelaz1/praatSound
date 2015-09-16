@@ -193,12 +193,12 @@
         Return iright
     End Function
 
-    Function RealTier_getArea(ByVal mme As DurationTier, ByVal tmin As Double, ByVal tmax As Double) As Double
+    Function RealTier_getArea(ByRef mme As DurationTier, ByVal tmin As Double, ByVal tmax As Double) As Double
         Dim n As Long = mme.f_getNumberOfPoints()
         Dim imin, imax As Long
         Dim points() As RealPoint = mme.points
-        If Not (n = 1) Then
-            Return (tmax - tmin) * points(1).value
+        If (n = 1) Then
+            Return (tmax - tmin) * points(0).value
         End If
         imin = AnyTier_timeToLowIndex(mme, tmin)
         If Not (imin = n) Then
@@ -282,7 +282,7 @@
         Return fleft + (t - tleft) * (fright - fleft) / (tright - tleft)
     End Function
 
-    Sub copyFall(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tminTarget As Double)
+    Sub copyFall(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByRef thee As Sound, ByVal tminTarget As Double)
         Dim imin, imax, iminTarget, distance, i As Long
         Dim dphase As Double
         imin = Sampled_xToHighIndex(mme, tmin)
@@ -308,7 +308,7 @@
         Next
     End Sub
 
-    Sub copyRise(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByVal thee As Sound, ByVal tmaxTarget As Double)
+    Sub copyRise(ByVal mme As Sound, ByVal tmin As Double, ByVal tmax As Double, ByRef thee As Sound, ByVal tmaxTarget As Double)
         Dim imin, imax, imaxTarget, distance, i As Long
         Dim dphase As Double
         imin = Sampled_xToHighIndex(mme, tmin)
@@ -339,8 +339,8 @@
         copyFall(mme, tmid, tmid + rightWidth, thee, tmidTarget)
     End Sub
 
-    Sub copyBell2(ByVal mme As Sound, ByVal source As PointProcess, ByVal isource As Double, ByVal leftWidth As Double,
-                   ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double, ByVal maxT As Double)
+    Sub copyBell2(ByRef mme As Sound, ByRef source As PointProcess, ByVal isource As Double, ByRef leftWidth As Double,
+                   ByRef rightWidth As Double, ByRef thee As Sound, ByVal tmidTarget As Double, ByVal maxT As Double)
         '/*
         '* Replace 'leftWidth' and 'rightWidth' by the lengths of the intervals in the source (instead of target),
         '* if these are shorter.
@@ -970,7 +970,7 @@ endoffor: If (Not formatChunkPresent) Then
         Return Math.Pow(NUMEulersConstant, x)
     End Function
 
-    Sub Sampled_shortTermAnalysis(ByRef mme As Sampled, ByVal windowDuration As Double, ByVal timeStep As Double, ByVal numberOfFrames As Long, ByVal firstTime As Double)
+    Sub Sampled_shortTermAnalysis(ByRef mme As Sampled, ByVal windowDuration As Double, ByVal timeStep As Double, ByRef numberOfFrames As Long, ByRef firstTime As Double)
         '!!!Melder_assert (windowDuration > 0.0)
         '!!!Melder_assert (timeStep > 0.0)
         Dim myDuration As Double = mme.dx * mme.nx
@@ -1376,7 +1376,10 @@ L105:
 
         t1 = 0
         For k = 0 To l1 - 1 Step 1
-            t5 = (t4 = (t3 = (t2 = t1 << 2) + t6)) + t6
+            t2 = t1 << 2
+            t3 = (t2 + t6)
+            t4 = t3 + t6
+            t5 = t4
             t7 = t1
             For i = 2 To ido Step 2
                 t2 += 2
@@ -1400,8 +1403,8 @@ L105:
                 cr4 = tr1 + tr4
                 ci2 = ti1 + ti4
                 ci4 = ti1 - ti4
-
-                ch((t8 = t7 + t0) - 1) = wa1(wa1Index + i - 2) * cr2 - wa1(wa1Index + i - 1) * ci2
+                t8 = t7 + t0
+                ch(t8 - 1) = wa1(wa1Index + i - 2) * cr2 - wa1(wa1Index + i - 1) * ci2
                 ch(t8) = wa1(wa1Index + i - 2) * ci2 + wa1(wa1Index + i - 1) * cr2
                 ch(t8 - 1) = wa1(wa2Index + i - 2) * cr3 - wa1(wa2Index + i - 1) * ci3
                 t8 += t0
@@ -1460,10 +1463,11 @@ L105:
 
             tr1 = cc(t1) + cc(t2)
             tr2 = cc(t3) + cc(t4)
-            ch(t5 = t3 << 2) = tr1 + tr2
+            t5 = t3 << 2
+            ch(t5) = tr1 + tr2
             ch((ido << 2) + t5 - 1) = tr2 - tr1
-            ch(t5 - 1) = cc(t3) - cc(t4)
             t5 += (ido << 1)
+            ch(t5 - 1) = cc(t3) - cc(t4)
             ch(t5) = cc(t2) - cc(t1)
 
             t1 += ido
@@ -1484,7 +1488,8 @@ L105:
 
             t2 = t1
             t4 = t1 << 2
-            t5 = (t6 = ido << 1) + t4
+            t6 = ido << 1
+            t5 = t6 + t4
             For i = 2 To ido - 1 Step 2
                 t3 = t2
                 t2 += 2
@@ -1529,8 +1534,8 @@ L105:
         End If
 
 L105:
-
-        t2 = (t1 = t0 + ido - 1) + (t0 << 1)
+        t1 = t0 + ido - 1
+        t2 = t1 + (t0 << 1)
         t3 = ido << 2
         t4 = ido
         t5 = ido << 1
@@ -1604,7 +1609,8 @@ L103:
 L106:
         t1 = 0
         t2 = ipp2 * t0
-        t7 = (t5 = ido << 1)
+        t5 = ido << 1
+        t7 = t5
         For j = 1 To ipph - 1 Step 1
             t1 += t0
             t2 -= t0
@@ -1699,7 +1705,8 @@ L116:
         ar1 = 1.0
         ai1 = 0.0
         t1 = 0
-        t9 = (t2 = ipp2 * idl1)
+        t2 = ipp2 * idl1
+        t9 = t2
         t3 = (ip - 1) * idl1
         For l = 1 To ipph - 1 Step 1
             t1 += idl1
@@ -2658,7 +2665,7 @@ enofselect: duration = mme.dx * mme.nx
             End If
 
             'autoNUMvector <double> r (- nsamp_window, nsamp_window)
-            Dim r(2 * nsamp_window) As Double
+            Dim r(2 * nsamp_window + 1) As Double
             Dim imax(maxnCandidates) As Long
             'autoNUMvector <double> localMean (1, mme.ny)
             Dim localMean(mme.ny) As Double
@@ -2720,7 +2727,8 @@ enofselect: duration = mme.dx * mme.nx
                 If ((startSample = halfnsamp_window + 1 - halfnsamp_period) < 1) Then
                     startSample = 0
                 End If
-                If ((endSample = halfnsamp_window + halfnsamp_period) > nsamp_window) Then
+                endSample = halfnsamp_window + halfnsamp_period
+                If (endSample > nsamp_window) Then
                     endSample = nsamp_window - 1
                 End If
                 For channel As Long = 0 To mme.ny - 1 Step 1
@@ -2762,7 +2770,7 @@ enofselect: duration = mme.dx * mme.nx
                     Next
                     '/* At zero lag, these are still equal. */
                     Dim sumy2 As Double = sumx2
-                    r(0) = 1.0
+                    r(nsamp_window) = 1.0
                     For i As Long = 1 To localMaximumLag Step 1
                         Dim product As Double = 0.0
                         For channel As Long = 0 To mme.ny Step 1
@@ -2776,7 +2784,8 @@ enofselect: duration = mme.dx * mme.nx
                                 product += x * y
                             Next
                         Next
-                        r(-i) = r(i) = product / Math.Sqrt(sumx2 * sumy2)
+                        r(nsamp_window + i) = product / Math.Sqrt(sumx2 * sumy2)
+                        r(nsamp_window - i) = r(nsamp_window + i)
                     Next
                 Else
 
@@ -2812,9 +2821,10 @@ enofselect: duration = mme.dx * mme.nx
                     ' * Normalize the autocorrelation to the value with zero lag,
                     ' * and divide it by the normalized autocorrelation of the window.
                     ' */
-                    r(0) = 1.0
+                    r(nsamp_window) = 1.0
                     For i As Long = 0 To brent_ixmax - 1 Step 1
-                        r(-i) = r(i) = ac(i + 1) / (ac(0) * windowR(i + 1))
+                        r(nsamp_window + i) = ac(i + 1) / (ac(0) * windowR(i + 1))
+                        r(nsamp_window - i) = r(nsamp_window + i)
                     Next
                 End If
                 '/*
@@ -2846,18 +2856,18 @@ enofselect: duration = mme.dx * mme.nx
                 For i As Long = 2 To maximumLag - 1 And i < brent_ixmax Step 1
                     '/* Not too unvoiced? */
                     ' /* Maximum? */
-                    If (r(i) > 0.5 * voicingThreshold And r(i) > r(i - 1) And r(i) >= r(i + 1)) Then
+                    If (r(nsamp_window + i) > 0.5 * voicingThreshold And r(nsamp_window + i) > r(nsamp_window + i - 1) And r(nsamp_window + i) >= r(nsamp_window + i + 1)) Then
                         Dim place As Integer = 0
 
                         '/*
                         ' * Use parabolic interpolation for first estimate of frequency,
                         ' * and sin(x)/x interpolation to compute the strength of this frequency.
                         ' */
-                        Dim dr As Double = 0.5 * (r(i + 1) - r(i - 1)), d2r = 2 * r(i) - r(i - 1) - r(i + 1)
+                        Dim dr As Double = 0.5 * (r(nsamp_window + i + 1) - r(nsamp_window + i - 1)), d2r = 2 * r(nsamp_window + i) - r(nsamp_window + i - 1) - r(nsamp_window + i + 1)
                         Dim frequencyOfMaximum As Double = 1 / mme.dx / (i + dr / d2r)
                         Dim offset As Long = -brent_ixmax - 1
                         '/* method & 1 ? */
-                        Dim strengthOfMaximum As Double = NUM_interpolate_sinc(mme.z, r(offset), brent_ixmax - offset, 1 / mme.dx / frequencyOfMaximum - offset, 30)
+                        Dim strengthOfMaximum As Double = NUM_interpolate_sinc(mme.z, r(nsamp_window + offset), brent_ixmax - offset, 1 / mme.dx / frequencyOfMaximum - offset, 30)
                         '/* : r [i] + 0.5 * dr * dr / d2r */
                         '	/* High values due to short windows are to be reflected around 1. */
                         If (strengthOfMaximum > 1.0) Then
@@ -2909,7 +2919,7 @@ enofselect: duration = mme.dx * mme.nx
                         Else
                             vv = brent_depth
                         End If
-                        ymid = NUMimproveMaximum(mme.z, r(offset), brent_ixmax - offset, imax(i) - offset, vv, xmid)
+                        ymid = NUMimproveMaximum(mme.z, r(nsamp_window + offset), brent_ixmax - offset, imax(i) - offset, vv, xmid)
                         xmid += offset
                         pitchFrame.candidates(i).frequency = 1.0 / mme.dx / xmid
                         If (ymid > 1.0) Then
@@ -3005,7 +3015,7 @@ enofselect: duration = mme.dx * mme.nx
         Return Sampled_getValueAtX(mme, time, Pitch_LEVEL_FREQUENCY, unit, interpolate)
     End Function
 
-    Function Sound_findMaximumCorrelation(ByRef mme As Sound, ByVal t1 As Double, ByVal windowLength As Double, ByVal tmin2 As Double, ByVal tmax2 As Double, ByVal tout As Double, ByVal peak As Double) As Double
+    Function Sound_findMaximumCorrelation(ByRef mme As Sound, ByVal t1 As Double, ByVal windowLength As Double, ByVal tmin2 As Double, ByVal tmax2 As Double, ByRef tout As Double, ByRef peak As Double) As Double
         Dim maximumCorrelation = -1.0, r1 = 0.0, r2 = 0.0, r3 = 0.0, r1_best, r3_best, ir As Double
         Dim halfWindowLength As Double = 0.5 * windowLength
         Dim ileft1 As Long = Sampled_xToNearestIndex(mme, t1 - halfWindowLength)
@@ -3209,7 +3219,7 @@ enofselect: duration = mme.dx * mme.nx
         Return Sampled_getValueAtSample(mme, iframe, Pitch_LEVEL_FREQUENCY, 0) <> NUMundefined
     End Function
 
-    Function Pitch_getVoicedIntervalAfter(ByRef mme As Pitch, ByVal after As Double, ByVal tleft As Double, ByVal tright As Double) As Integer
+    Function Pitch_getVoicedIntervalAfter(ByRef mme As Pitch, ByVal after As Double, ByRef tleft As Double, ByRef tright As Double) As Integer
         Dim ileft As Long = Sampled_xToHighIndex(mme, after), iright
         '/* Offright. */
         If (ileft > mme.nx - 1) Then
@@ -3265,7 +3275,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         End If
     End Function
 
-    Function NUMminimize_brent(ByVal a As Double, ByVal b As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer, ByVal tol As Double, ByVal fx As Double) As Double
+    Function NUMminimize_brent(ByVal a As Double, ByVal b As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer, ByVal tol As Double, ByRef fx As Double) As Double
         Dim x, v, fv, w, fw As Double
         Dim golden As Double = 1 - NUM_goldenSection
         Dim sqrt_epsilon As Double = Math.Sqrt(Double.Epsilon) '(NUMfpp -> eps)
@@ -3398,7 +3408,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return x
     End Function
 
-    Function NUMimproveExtremum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByVal ixmid_real As Double, ByVal isMaximum As Integer) As Double
+    Function NUMimproveExtremum(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal ixmid As Long, ByVal interpolation As Integer, ByRef ixmid_real As Double, ByVal isMaximum As Integer) As Double
         '!!! struct improve_params params
         Dim result As Double
         If (ixmid <= 1) Then
@@ -3466,7 +3476,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return ixmax - ixmin + 1
     End Function
 
-    Function NUM_interpolate_sinc(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal x As Double, ByVal maxDepth As Long) As Double
+    Function NUM_interpolate_sinc(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal x As Double, ByRef maxDepth As Long) As Double
         Dim ix, midleft As Long, midright = midleft + 1, left, right
         midleft = Math.Floor(x)
         Dim result As Double = 0.0, a, halfsina, aa, daa
@@ -3633,7 +3643,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         'End If
     End Sub
 
-    Sub Vector_getMinimumAndX(ByRef mme As Vector, xmin As Double, xmax As Double, channel As Long, interpolation As Integer, ByVal return_minimum As Double, return_xOfMinimum As Double)
+    Sub Vector_getMinimumAndX(ByRef mme As Vector, xmin As Double, xmax As Double, channel As Long, interpolation As Integer, ByRef return_minimum As Double, return_xOfMinimum As Double)
         Dim n As Long = mme.nx, imin = 0, imax = 0
         '!!!Melder_assert (channel >= 1 && channel <= my ny)
         'double *y = my z [channel]
@@ -3642,7 +3652,8 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
             xmin = mme.xmin
             xmax = mme.xmax
         End If
-        If (Not Sampled_getWindowSamples(mme, xmin, xmax, imin, imax)) Then
+        Dim nS As Long = Sampled_getWindowSamples(mme, xmin, xmax, imin, imax)
+        If (nS = 0) Then
             '/*
             ' * No samples between xmin and xmax.
             ' * Try to return the greater of the values at these two points.
@@ -3699,7 +3710,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
                 x = xmax
             End If
         End If
-        If (return_minimum) Then
+        If (Not IsNothing(return_minimum)) Then
             return_minimum = minimum
         End If
         'If (return_xOfminimum) Then
@@ -3735,10 +3746,10 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Vector_getMaximumAndXAndChannel(mme, xmin, xmax, interpolation, maximum)
         Return maximum
     End Function
-    Sub Vector_getMinimumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, ByVal return_minimum As Double)
+    Sub Vector_getMinimumAndXAndChannel(ByRef mme As Vector, xmin As Double, xmax As Double, interpolation As Integer, ByRef return_minimum As Double)
         Dim minimum, xOfMinimum As Double
         Dim channelOfMinimum As Long = 1
-        Vector_getMinimumAndX(mme, xmin, xmax, 1, interpolation, minimum, xOfMinimum)
+        Vector_getMinimumAndX(mme, xmin, xmax, 0, interpolation, minimum, xOfMinimum)
         For channel As Long = 2 To mme.ny Step 1
             Dim minimumOfChannel, xOfMinimumOfChannel As Double
             Vector_getMinimumAndX(mme, xmin, xmax, channel, interpolation, minimumOfChannel, xOfMinimumOfChannel)
@@ -3748,7 +3759,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
                 channelOfMinimum = channel
             End If
         Next
-        If (return_minimum) Then
+        If (Not IsNothing(return_minimum)) Then
             return_minimum = minimum
         End If
 
@@ -3780,7 +3791,8 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
             'autoMelderProgress progress (L"Sound & Pitch: To PointProcess...")
             While 1 = 1
                 Dim tleft, tright As Double
-                If (Not Pitch_getVoicedIntervalAfter(pitch, t, tleft, tright)) Then
+                Dim nS As Integer = Pitch_getVoicedIntervalAfter(pitch, t, tleft, tright)
+                If (nS = 0) Then
                     GoTo endofglobalwhile
                 End If
                 '/*
@@ -3862,7 +3874,7 @@ endofglobalwhile: Return point
     End Function
 
     Function Sampled_indexToX(ByRef mme As Sampled, ByVal i As Long) As Double
-        Return mme.x1 + (i - 1) * mme.dx
+        Return mme.x1 + i * mme.dx
     End Function
 
     Function Pitch_to_PitchTier(ByRef mme As Pitch) As PitchTier
@@ -3897,7 +3909,7 @@ endofglobalwhile: Return point
         Next
     End Sub
     Sub Main()
-        Dim s As Sound = Sound_readFromSoundFile("C:\Users\fae1987\Documents\LOL\PraatSound\melanie.wav")
+        Dim s As Sound = Sound_readFromSoundFile("C:\Users\fae1987\Documents\LOL\PraatSound\melanie_PraatSound.wav")
         Vector_subtractMean(s)
         Dim timestep As Double = 0.01
         Dim minimumPitch As Double = 75
@@ -3907,6 +3919,7 @@ endofglobalwhile: Return point
         Dim pulses As PointProcess = Sound_Pitch_to_PointProcess_cc(s, pit)
         Dim pitch As PitchTier = Pitch_to_PitchTier(pit)
         Dim duration As DurationTier = New DurationTier(pit.xmin, pit.xmax)
+        duration.addPoint(0.5 * (s.xmin + s.xmax), 1)
         Dim sProcessed As Sound = Sound_Point_Pitch_Duration_to_Sound(s, pulses, pitch, duration, MAX_T)
     End Sub
 

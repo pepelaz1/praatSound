@@ -88,7 +88,7 @@
                 t = t - 1
             End If
         End While
-        For j = 0 To SHORT_LAG
+        For j = 0 To SHORT_LAG - 1
             randomArray(j + LAG_DIFF) = u(j)
         Next
         For j = j To LONG_LAG - 1 Step 1
