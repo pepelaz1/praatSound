@@ -334,7 +334,7 @@
         Next
     End Sub
 
-    Sub copyBell(ByVal mme As Sound, ByVal tmid As Double, ByVal leftWidth As Double, ByVal rightWidth As Double, ByVal thee As Sound, ByVal tmidTarget As Double)
+    Sub copyBell(ByVal mme As Sound, ByVal tmid As Double, ByVal leftWidth As Double, ByVal rightWidth As Double, ByRef thee As Sound, ByVal tmidTarget As Double)
         copyRise(mme, tmid - leftWidth, tmid, thee, tmidTarget)
         copyFall(mme, tmid, tmid + rightWidth, thee, tmidTarget)
     End Sub
@@ -723,6 +723,21 @@ endofswitch:
         Catch ex As Exception
             Console.WriteLine(ex.Message)
         End Try
+    End Sub
+
+    Sub MelderFile_writeFloatToAudio(ByRef writer As System.IO.BinaryWriter, ByVal numberOfChannels As Integer, ByVal encoding As Integer, ByRef buffer(,) As Double, ByVal numberOfSamples As Long)
+        For isamp As Long = 0 To numberOfSamples - 1 Step 1
+            For ichan As Long = 0 To numberOfChannels - 1 Step 1
+                Dim value As Long = Math.Round(buffer(ichan, isamp) * 128)
+                If (value < -128) Then
+                    value = -128
+                End If
+                If (value > 127) Then
+                    value = 127
+                End If
+                writer.Write(value)
+            Next
+        Next
     End Sub
     Sub Melder_checkWavFile(ByRef reader As System.IO.BinaryReader, ByRef numberOfChannels As Integer, ByRef encoding As Integer, ByRef sampleRate As Double, ByRef startOfData As Long, ByRef numberOfSamples As Long)
         Dim data(7), chunkID(3) As Byte
@@ -3921,6 +3936,11 @@ endofglobalwhile: Return point
         Dim duration As DurationTier = New DurationTier(pit.xmin, pit.xmax)
         duration.addPoint(0.5 * (s.xmin + s.xmax), 1)
         Dim sProcessed As Sound = Sound_Point_Pitch_Duration_to_Sound(s, pulses, pitch, duration, MAX_T)
+        Dim outFilePath As String = "C:\Users\fae1987\Documents\LOL\PraatSound\melanie_outfile.pcm"
+        Dim writer = New System.IO.BinaryWriter(System.IO.File.Open(outFilePath, System.IO.FileMode.Create))
+        MelderFile_writeFloatToAudio(writer, sProcessed.ny, 0, sProcessed.z, sProcessed.nx)
+        writer.Close()
+
     End Sub
 
 
