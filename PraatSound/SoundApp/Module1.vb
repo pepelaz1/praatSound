@@ -300,10 +300,10 @@
         iminTarget = Sampled_xToHighIndex(thee, tminTarget)
         distance = iminTarget - imin
         dphase = Math.PI / (imax - imin + 1)
-        For i = imin To imax Step 1
+        For i = imin - 1 To imax - 1 Step 1
             Dim iTarget As Long = i + distance
             If (iTarget >= 1 And iTarget <= thee.nx) Then
-                thee.z(1, iTarget) += mme.z(1, i) * 0.5 * (1 + Math.Cos(dphase * (i - imin + 0.5)))
+                thee.z(0, iTarget) += mme.z(0, i) * 0.5 * (1 + Math.Cos(dphase * (i - imin + 0.5)))
             End If
         Next
     End Sub
@@ -326,10 +326,10 @@
         imaxTarget = Sampled_xToHighIndex(thee, tmaxTarget) - 1
         distance = imaxTarget - imax
         dphase = Math.PI / (imax - imin + 1)
-        For i = imin To imax Step 1
+        For i = imin - 1 To imax - 1 Step 1
             Dim iTarget As Long = i + distance
             If (iTarget >= 1 And iTarget <= thee.nx) Then
-                thee.z(1, iTarget) += mme.z(1, i) * 0.5 * (1 - Math.Cos(dphase * (i - imin + 0.5)))
+                thee.z(0, iTarget) += mme.z(0, i) * 0.5 * (1 - Math.Cos(dphase * (i - imin + 0.5)))
             End If
         Next
     End Sub
@@ -635,8 +635,8 @@ endofswitch:
                     Dim numberOfBytesPerSamplePerChannel As Integer = 2
                     '(int) sizeof (double) = 8
                     If (numberOfChannels > 8 / numberOfBytesPerSamplePerChannel) Then
-                        For isamp As Long = 1 To numberOfSamples Step 1
-                            For ichan As Long = 1 To numberOfChannels Step 1
+                        For isamp As Long = 0 To numberOfSamples - 1 Step 1
+                            For ichan As Long = 0 To numberOfChannels - 1 Step 1
                                 buffer(ichan, isamp) = bingeti2LE(reader) * (1.0 / 32768)
                             Next
                         Next
@@ -960,7 +960,7 @@ endoffor: If (Not formatChunkPresent) Then
                 Return Nothing
             End If
             '// start from beginning of Data Chunk
-            If (reader.BaseStream.Seek(0, IO.SeekOrigin.Begin) = IO.SeekOrigin.End) Then
+            If (reader.BaseStream.Seek(startOfData, IO.SeekOrigin.Begin) = IO.SeekOrigin.End) Then
                 Console.WriteLine("No data in audio file.")
                 Return Nothing
             End If
@@ -1165,8 +1165,8 @@ endoffor:           End If
 
             ch(t1) = cc(t2) + cc(t3 + t2)
             ch(t1 + t0) = cc(t2) - cc(t3 + t2)
-            t2 = t1 << 1
             t1 += ido
+            t2 = t1 << 1
         Next
 
         If (ido < 2) Then
@@ -1195,8 +1195,9 @@ endoffor:           End If
                 ch(t6 - 1) = wa1(wa1Index + i - 2) * tr2 - wa1(wa1Index + i - 1) * ti2
                 ch(t6) = wa1(wa1Index + i - 2) * ti2 + wa1(wa1Index + i - 1) * tr2
             Next
-            t2 = t1 << 1
             t1 += ido
+            t2 = t1 << 1
+
         Next
 
         If (ido Mod 2 = 1) Then
@@ -1223,7 +1224,8 @@ L105:
         Dim t0, t1, t2, t3, t4, t5, t6 As Long
 
         t1 = 0
-        t0 = (t2 = l1 * ido)
+        t2 = l1 * ido
+        t0 = t2
         t3 = ido << 1
         For k = 0 To l1 - 1 Step 1
 
@@ -1270,7 +1272,9 @@ L105:
         End If
 
 L105:
-        t3 = (t2 = (t1 = ido) - 1)
+        t1 = ido
+        t2 = t1 - 1
+        t3 = t2
         t2 += t0
         For k = 0 To l1 - 1 Step 1
 
@@ -1318,9 +1322,11 @@ L105:
         For k = 0 To l1 - 1 Step 1
 
             t7 = t1 + (t1 << 1)
-            t6 = (t5 = t7 + t3)
+            t5 = t7 + t3
+            t6 = t5
             t8 = t1
-            t10 = (t9 = t1 + t0) + t0
+            t9 = t1 + t0
+            t10 = t9 + t0
 
             For i = 2 To ido - 1 Step 2
 
@@ -1372,12 +1378,12 @@ L105:
             t4 += t6
             tr2 = cc(t3) + cc(t4 - 1)
             ch(t5) = tr2 + tr3
+            t5 += t0
             ch(t5) = tr1 - tr4
             t5 += t0
             ch(t5) = tr2 - tr3
             t5 += t0
             ch(t5) = tr1 + tr4
-            t5 += t0
             t1 += ido
             t3 += t2
         Next
@@ -1392,9 +1398,9 @@ L105:
         t1 = 0
         For k = 0 To l1 - 1 Step 1
             t2 = t1 << 2
-            t3 = (t2 + t6)
-            t4 = t3 + t6
-            t5 = t4
+            t3 = t2 + t6
+            t4 = t3
+            t5 = t4 + t6
             t7 = t1
             For i = 2 To ido Step 2
                 t2 += 2
@@ -1418,14 +1424,14 @@ L105:
                 cr4 = tr1 + tr4
                 ci2 = ti1 + ti4
                 ci4 = ti1 - ti4
-                t8 = t7 + t0
+                t8 = t7 + t0 - 1
                 ch(t8 - 1) = wa1(wa1Index + i - 2) * cr2 - wa1(wa1Index + i - 1) * ci2
                 ch(t8) = wa1(wa1Index + i - 2) * ci2 + wa1(wa1Index + i - 1) * cr2
+                t8 += t0
                 ch(t8 - 1) = wa1(wa2Index + i - 2) * cr3 - wa1(wa2Index + i - 1) * ci3
-                t8 += t0
                 ch(t8) = wa1(wa2Index + i - 2) * ci3 + wa1(wa2Index + i - 1) * cr3
-                ch(t8 - 1) = wa1(wa3Index + i - 2) * cr4 - wa1(wa3Index + i - 1) * ci4
                 t8 += t0
+                ch(t8 - 1) = wa1(wa3Index + i - 2) * cr4 - wa1(wa3Index + i - 1) * ci4
                 ch(t8) = wa1(wa3Index + i - 2) * ci4 + wa1(wa3Index + i - 1) * cr4
             Next
             t1 += ido
@@ -1449,12 +1455,12 @@ L105:
             tr1 = cc(t1 - 1) - cc(t4 - 1)
             tr2 = cc(t1 - 1) + cc(t4 - 1)
             ch(t5) = tr2 + tr2
+            t5 += t0
             ch(t5) = sqrt2 * (tr1 - ti1)
             t5 += t0
             ch(t5) = ti2 + ti2
             t5 += t0
             ch(t5) = -sqrt2 * (tr1 + ti1)
-            t5 += t0
             t3 += ido
             t1 += t2
             t4 += t2
@@ -1506,8 +1512,8 @@ L105:
             t6 = ido << 1
             t5 = t6 + t4
             For i = 2 To ido - 1 Step 2
-                t3 = t2
                 t2 += 2
+                t3 = t2
                 t4 += 2
                 t5 -= 2
 
@@ -2450,7 +2456,7 @@ L110:
     ByVal silenceThreshold As Double, ByVal voicingThreshold As Double,
     ByVal octaveCost As Double, ByVal octaveJumpCost As Double, ByVal voicedUnvoicedCost As Double, ByVal ceiling As Double) As Pitch
         Try
-            Dim fftTable As NumFFTTable = New NumFFTTable(1)
+            Dim fftTable As NumFFTTable = New NumFFTTable(0)
             Dim duration, t1 As Double
             '/* Window length in seconds. */
             Dim dt_window As Double
@@ -2624,11 +2630,11 @@ enofselect: duration = mme.dx * mme.nx
                 '/*
                 '* Create buffers for autocorrelation analysis.
                 '*/
-                frame = New Double(mme.ny, nsampFFT) {}
+                frame = New Double(mme.ny - 1, nsampFFT - 1) {}
                 secondRes = nsampFFT
-                ReDim windowR(nsampFFT)
-                ReDim window(nsamp_window)
-                ReDim ac(nsampFFT)
+                ReDim windowR(nsampFFT - 1)
+                ReDim window(nsamp_window - 1)
+                ReDim ac(nsampFFT - 1)
                 fftTable = New NumFFTTable(nsampFFT)
 
 
@@ -2645,8 +2651,8 @@ enofselect: duration = mme.dx * mme.nx
                     Next
                 Else
                     '// Hanning window
-                    For i As Long = 0 To nsamp_window - 1 Step 1
-                        window(i) = 0.5 - 0.5 * Math.Cos(i * 2 * Math.PI / (nsamp_window + 1))
+                    For i As Long = 1 To nsamp_window Step 1
+                        window(i - 1) = 0.5 - 0.5 * Math.Cos(i * 2 * Math.PI / (nsamp_window + 1))
                     Next
                 End If
 
@@ -2659,13 +2665,13 @@ enofselect: duration = mme.dx * mme.nx
                 NUMfft_forward(fftTable, windowR)
                 '// DC component
                 windowR(0) *= windowR(0)
-                For i As Long = 2 To nsampFFT - 1 Step 2
+                For i As Long = 1 To nsampFFT - 2 Step 2
                     windowR(i) = windowR(i) * windowR(i) + windowR(i + 1) * windowR(i + 1)
                     '// power spectrum: square and zero
                     windowR(i + 1) = 0.0
                 Next
                 '   // Nyquist frequency
-                windowR(nsampFFT) *= windowR(nsampFFT)
+                windowR(nsampFFT - 1) *= windowR(nsampFFT - 1)
                 '// autocorrelation
                 NUMfft_backward(fftTable, windowR)
                 '// normalize
@@ -2680,10 +2686,10 @@ enofselect: duration = mme.dx * mme.nx
             End If
 
             'autoNUMvector <double> r (- nsamp_window, nsamp_window)
-            Dim r(2 * nsamp_window + 1) As Double
-            Dim imax(maxnCandidates) As Long
+            Dim r(2 * nsamp_window) As Double
+            Dim imax(maxnCandidates - 1) As Long
             'autoNUMvector <double> localMean (1, mme.ny)
-            Dim localMean(mme.ny) As Double
+            Dim localMean(mme.ny - 1) As Double
 
             'autoMelderProgress progress (L"Sound to Pitch...")
 
@@ -2739,7 +2745,8 @@ enofselect: duration = mme.dx * mme.nx
                 ' * Compute the local peak look half a longest period to both sides.
                 ' */
                 localPeak = 0.0
-                If ((startSample = halfnsamp_window + 1 - halfnsamp_period) < 1) Then
+                startSample = halfnsamp_window + 1 - halfnsamp_period
+                If (startSample < 1) Then
                     startSample = 0
                 End If
                 endSample = halfnsamp_window + halfnsamp_period
@@ -2747,7 +2754,7 @@ enofselect: duration = mme.dx * mme.nx
                     endSample = nsamp_window - 1
                 End If
                 For channel As Long = 0 To mme.ny - 1 Step 1
-                    For j As Long = startSample To endSample Step 1
+                    For j As Long = startSample - 1 To endSample - 1 Step 1
                         Dim value As Double = Math.Abs(frame(channel, j))
                         If (value > localPeak) Then
                             localPeak = value
@@ -2788,7 +2795,7 @@ enofselect: duration = mme.dx * mme.nx
                     r(nsamp_window) = 1.0
                     For i As Long = 1 To localMaximumLag Step 1
                         Dim product As Double = 0.0
-                        For channel As Long = 0 To mme.ny Step 1
+                        For channel As Long = 0 To mme.ny - 1 Step 1
                             Dim ampIndex As Long = channel + offset
                             Dim y0 As Double = mme.z(ampIndex + i, 0) - localMean(channel)
                             Dim yZ As Double = mme.z(ampIndex + i + nsamp_window, 0) - localMean(channel)
@@ -2812,7 +2819,8 @@ enofselect: duration = mme.dx * mme.nx
                     Next
                     For channel As Long = 0 To mme.ny - 1 Step 1
                         '/* Complex spectrum. */
-                        Dim chd() As Double = New Double(secondRes) {}
+
+                        Dim chd() As Double = New Double(secondRes - 1) {}
                         Dim ttt As Integer = 0
                         While ttt < secondRes
                             chd(ttt) = frame(channel, ttt)
@@ -2820,6 +2828,13 @@ enofselect: duration = mme.dx * mme.nx
                         End While
 
                         NUMfft_forward(fftTable, chd)
+                        ttt = 0
+                        While ttt < secondRes
+                            frame(channel, ttt) = chd(ttt)
+                            ttt += 1
+                        End While
+
+
                         ' /* DC component. */
                         ac(0) += frame(channel, 0) * frame(channel, 0)
                         For i As Long = 1 To nsampFFT - 2 Step 2
@@ -2827,7 +2842,7 @@ enofselect: duration = mme.dx * mme.nx
                             ac(i) += frame(channel, i) * frame(channel, i) + frame(channel, i + 1) * frame(channel, i + 1)
                         Next
                         ' /* Nyquist frequency. */
-                        ac(nsampFFT) += frame(channel, nsampFFT) * frame(channel, nsampFFT)
+                        ac(nsampFFT - 1) += frame(channel, nsampFFT - 1) * frame(channel, nsampFFT - 1)
                     Next
                     '/* Autocorrelation. */
                     NUMfft_backward(fftTable, ac)
@@ -2837,7 +2852,7 @@ enofselect: duration = mme.dx * mme.nx
                     ' * and divide it by the normalized autocorrelation of the window.
                     ' */
                     r(nsamp_window) = 1.0
-                    For i As Long = 0 To brent_ixmax - 1 Step 1
+                    For i As Long = 1 To brent_ixmax Step 1
                         r(nsamp_window + i) = ac(i + 1) / (ac(0) * windowR(i + 1))
                         r(nsamp_window - i) = r(nsamp_window + i)
                     Next
@@ -2894,11 +2909,12 @@ enofselect: duration = mme.dx * mme.nx
                         ' */
                         If (pitchFrame.nCandidates < thee.maxCandidates) Then
                             '/* Is there still a free place? */
-                            place = ++pitchFrame.nCandidates
+                            place = pitchFrame.nCandidates
+                            pitchFrame.nCandidates += 1
                         Else
                             '/* Try the place of the weakest candidate so far. */
-                            Dim weakest As Double = 2
-                            For iweak As Integer = 2 To thee.maxCandidates Step 1
+                            Dim weakest As Double = 1
+                            For iweak As Integer = 1 To thee.maxCandidates - 1 Step 1
                                 '/* High frequencies are to be favoured */
                                 '/* if we want to analyze a perfectly periodic signal correctly. */
                                 Dim localStrength As Double = pitchFrame.candidates(iweak).strength - octaveCost * Log2X(minimumPitch / pitchFrame.candidates(iweak).frequency)
@@ -2912,11 +2928,12 @@ enofselect: duration = mme.dx * mme.nx
                                 place = 0
                             End If
                         End If
-                        If (place) Then
+                        If (place <> 0) Then
                             '/* Have we found a place for this candidate? */
                             pitchFrame.candidates(place).frequency = frequencyOfMaximum
                             pitchFrame.candidates(place).strength = strengthOfMaximum
                             imax(place) = i
+
                         End If
                     End If
                 Next
@@ -2924,7 +2941,7 @@ enofselect: duration = mme.dx * mme.nx
                 '/*
                 ' * Second pass: for extra precision, maximize sin(x)/x interpolation ('sinc').
                 ' */
-                For i As Long = 2 To pitchFrame.nCandidates Step 1
+                For i As Long = 1 To pitchFrame.nCandidates - 1 Step 1
                     If (method <> AC_HANNING Or pitchFrame.candidates(i).frequency > 0.0 / mme.dx) Then
                         Dim xmid, ymid As Double
                         Dim offset As Long = -brent_ixmax - 1
@@ -3918,7 +3935,7 @@ endofglobalwhile: Return point
                 sum += mme.z(channel, i)
             Next
             Dim mean As Double = sum / mme.nx
-            For i As Long = 1 To mme.nx - 1 Step 1
+            For i As Long = 0 To mme.nx - 1 Step 1
                 mme.z(channel, i) -= mean
             Next
         Next

@@ -78,9 +78,9 @@ L107:
                 For ii = 2 To ido - 1 Step 2
                     fi += 1.0
                     arg = fi * argld
-                    wa(i) = Math.Cos(arg)
+                    wa(i + n) = Math.Cos(arg)
                     i += 1
-                    wa(i) = Math.Sin(arg)
+                    wa(i + n) = Math.Sin(arg)
                     i += 1
                 Next
                 is1 += ido
@@ -98,8 +98,11 @@ L107:
     End Sub
     Public Sub New(ByVal n1 As Long)
         n = n1
+        If n1 = 0 Then
+            Return
+        End If
         trigcache = New Double(3 * n - 1) {}
-        splitcache = New Long(32) {}
+        splitcache = New Long(31) {}
         'ReDim trigcache(3 * n - 1)
         'ReDim splitcache(32)
         'trigcache = New Double() {}

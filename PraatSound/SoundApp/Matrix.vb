@@ -15,7 +15,7 @@
         ny = _ny
         dy = _dy
         y1 = _y1
-        z = New Double(1, _nx - _ny + 1) {}
+        z = New Double(0, _nx - _ny) {}
     End Sub
     Public Sub init(ByRef mme As Matrix, ByVal xmin As Double, ByVal xmax As Double, ByVal nx As Long, ByVal dx As Double, ByVal x1 As Double,
                                               ByVal ymin As Double, ByVal ymax As Double, ByVal ny As Long, ByVal dy As Double, ByVal y1 As Double
@@ -26,6 +26,6 @@
         mme.ny = ny
         mme.dy = dy
         mme.y1 = y1
-        mme.z = New Double(1, mme.nx - mme.ny + 1) {}
+        mme.z = New Double(0, mme.nx - mme.ny) {}
     End Sub
 End Class

@@ -8,11 +8,11 @@
 
         ceiling = ceiling1
         maxCandidates = maxnCandidates1
-        frame = New Pitch_Frame(nt) {}
+        frame = New Pitch_Frame(nt - 1) {}
 
         '/* Put one candidate in every frame (unvoiced, silent). */
-        For it As Long = 0 To nt Step 1
-            frame(it) = New Pitch_Frame(1)
+        For it As Long = 0 To nt - 1 Step 1
+            frame(it) = New Pitch_Frame(0)
         Next
     End Sub
 End Class
