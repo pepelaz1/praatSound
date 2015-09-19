@@ -1374,8 +1374,8 @@ L105:
             t5 = t1
             tr3 = cc(t4 - 1) + cc(t4 - 1)
             tr4 = cc(t4) + cc(t4)
-            tr1 = cc(t3) - cc(t4 - 1)
             t4 += t6
+            tr1 = cc(t3) - cc(t4 - 1)
             tr2 = cc(t3) + cc(t4 - 1)
             ch(t5) = tr2 + tr3
             t5 += t0
@@ -1402,7 +1402,7 @@ L105:
             t4 = t3
             t5 = t4 + t6
             t7 = t1
-            For i = 2 To ido Step 2
+            For i = 2 To ido - 1 Step 2
                 t2 += 2
                 t3 += 2
                 t4 -= 2
@@ -1424,7 +1424,7 @@ L105:
                 cr4 = tr1 + tr4
                 ci2 = ti1 + ti4
                 ci4 = ti1 - ti4
-                t8 = t7 + t0 - 1
+                t8 = t7 + t0
                 ch(t8 - 1) = wa1(wa1Index + i - 2) * cr2 - wa1(wa1Index + i - 1) * ci2
                 ch(t8) = wa1(wa1Index + i - 2) * ci2 + wa1(wa1Index + i - 1) * cr2
                 t8 += t0
@@ -2852,9 +2852,9 @@ enofselect: duration = mme.dx * mme.nx
                     ' * and divide it by the normalized autocorrelation of the window.
                     ' */
                     r(nsamp_window) = 1.0
-                    For i As Long = 1 To brent_ixmax Step 1
-                        r(nsamp_window + i) = ac(i + 1) / (ac(0) * windowR(i + 1))
-                        r(nsamp_window - i) = r(nsamp_window + i)
+                    For i As Long = 0 To brent_ixmax - 1 Step 1
+                        r(nsamp_window + i + 1) = ac(i + 1) / (ac(0) * windowR(i + 1))
+                        r(nsamp_window - i - 1) = r(nsamp_window + i + 1)
                     Next
                 End If
                 '/*
@@ -2897,7 +2897,7 @@ enofselect: duration = mme.dx * mme.nx
                         Dim frequencyOfMaximum As Double = 1 / mme.dx / (i + dr / d2r)
                         Dim offset As Long = -brent_ixmax - 1
                         '/* method & 1 ? */
-                        Dim strengthOfMaximum As Double = NUM_interpolate_sinc(mme.z, r(nsamp_window + offset), brent_ixmax - offset, 1 / mme.dx / frequencyOfMaximum - offset, 30)
+                        Dim strengthOfMaximum As Double = NUM_interpolate_sinc(r, nsamp_window + offset, brent_ixmax - offset, 1 / mme.dx / frequencyOfMaximum - offset, 30)
                         '/* : r [i] + 0.5 * dr * dr / d2r */
                         '	/* High values due to short windows are to be reflected around 1. */
                         If (strengthOfMaximum > 1.0) Then
@@ -3297,9 +3297,9 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return 1
     End Function
 
-    Function improve_evaluate(ByVal x As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer) As Double
+    Function improve_evaluate(ByVal x As Double, ByRef r() As Double, ByVal offset As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer) As Double
         'struct improve_params *me = (struct improve_params *) closure
-        Dim y As Double = NUM_interpolate_sinc(z, channel, nx, x, depth)
+        Dim y As Double = NUM_interpolate_sinc(r, offset, nx, x, depth)
         If isMaximum Then
             Return -y
         Else
@@ -3307,7 +3307,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         End If
     End Function
 
-    Function NUMminimize_brent(ByVal a As Double, ByVal b As Double, ByRef z(,) As Double, ByVal channel As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer, ByVal tol As Double, ByRef fx As Double) As Double
+    Function NUMminimize_brent(ByVal a As Double, ByVal b As Double, ByRef r() As Double, ByRef offset As Long, ByVal depth As Long, ByVal nx As Long, ByVal isMaximum As Integer, ByVal tol As Double, ByRef fx As Double) As Double
         Dim x, v, fv, w, fw As Double
         Dim golden As Double = 1 - NUM_goldenSection
         Dim sqrt_epsilon As Double = Math.Sqrt(Double.Epsilon) '(NUMfpp -> eps)
@@ -3322,7 +3322,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         '/* First step - golden section */
 
         v = a + golden * (b - a)
-        fv = improve_evaluate(v, z, channel, depth, nx, isMaximum)
+        fv = improve_evaluate(v, r, offset, depth, nx, isMaximum)
         x = v
         w = v
         fx = fv
@@ -3396,7 +3396,7 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
 
             Dim t As Double = x + new_step '	/* Tentative point for the min	*/
             Dim ft As Double
-            ft = fv = improve_evaluate(t, z, channel, depth, nx, isMaximum)
+            ft = fv = improve_evaluate(t, r, offset, depth, nx, isMaximum)
 
             '/*
             '	If t is a better approximation, reduce the range so that
@@ -3473,7 +3473,11 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         'params.ixmax = nx
         'params.isMaximum = isMaximum
         '!!! improve_evaluate
-        ixmid_real = NUMminimize_brent(ixmid - 1, ixmid + 1, z, channel, depth, nx, isMaximum, 0.0000000001, result)
+        Dim ch1(nx - 1) As Double
+        For i As Long = 0 To nx - 1
+            ch1(i) = z(channel, i)
+        Next
+        ixmid_real = NUMminimize_brent(ixmid - 1, ixmid + 1, ch1, 0, depth, nx, isMaximum, 0.0000000001, result)
         If isMaximum Then
             Return -result
         Else
@@ -3508,22 +3512,23 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         Return ixmax - ixmin + 1
     End Function
 
-    Function NUM_interpolate_sinc(ByRef z(,) As Double, ByVal channel As Long, ByVal nx As Long, ByVal x As Double, ByRef maxDepth As Long) As Double
-        Dim ix, midleft As Long, midright = midleft + 1, left, right
+    Function NUM_interpolate_sinc(ByRef y() As Double, ByRef offset As Long, ByVal nx As Long, ByVal x As Double, ByRef maxDepth As Long) As Double
+        Dim ix, midleft As Long, midright, left, right
         midleft = Math.Floor(x)
+        midright = midleft + 1
         Dim result As Double = 0.0, a, halfsina, aa, daa
 
         If (nx < 0) Then
             Return NUMundefined
         End If
         If (x > nx - 1) Then
-            Return z(channel, nx)
+            Return y(offset + nx - 1)
         End If
         If (x < 0) Then
-            Return z(channel, 0)
+            Return y(offset + 0)
         End If
-        If (x = midleft) Then
-            Return z(channel, midleft)
+        If (x = midleft - 1) Then
+            Return y(offset + midleft - 1)
         End If
         If (maxDepth > midright - 1) Then
             maxDepth = midright - 1
@@ -3532,14 +3537,14 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
             maxDepth = nx - midleft
         End If
         If (maxDepth <= NUM_VALUE_INTERPOLATE_NEAREST) Then
-            Return z(channel, Convert.ToUInt32(Math.Floor(x + 0.5)))
+            Return y(offset + Convert.ToUInt32(Math.Floor(x + 0.5)))
         End If
         If (maxDepth = NUM_VALUE_INTERPOLATE_LINEAR) Then
-            Return z(channel, midleft) + (x - midleft) * (z(channel, midright) - z(channel, midleft))
+            Return y(offset + midleft) + (x - midleft) * (y(offset + midright) - y(offset + midleft))
         End If
         If (maxDepth = NUM_VALUE_INTERPOLATE_CUBIC) Then
-            Dim yl As Double = z(channel, midleft), yr = z(channel, midright)
-            Dim dyl As Double = 0.5 * (yr - z(channel, midleft - 1)), dyr = 0.5 * (z(channel, midright + 1) - yl)
+            Dim yl As Double = y(offset + midleft), yr = y(offset + midright)
+            Dim dyl As Double = 0.5 * (yr - y(offset + midleft - 1)), dyr = 0.5 * (y(offset + midright + 1) - yl)
             Dim fil As Double = x - midleft, fir = midright - x
             Return yl * fir + yr * fil - fil * fir * (0.5 * (dyr - dyl) + (fil - 0.5) * (dyl + dyr - 2 * (yr - yl)))
         End If
@@ -3549,9 +3554,9 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         halfsina = 0.5 * Math.Sin(a)
         aa = a / (x - left + 1)
         daa = Math.PI / (x - left + 1)
-        For ix = midleft To left Step -1
+        For ix = midleft - 1 To left - 1 Step -1
             Dim d As Double = halfsina / a * (1.0 + Math.Cos(aa))
-            result += z(channel, ix) * d
+            result += y(offset + ix) * d
             a += Math.PI
             aa += daa
             halfsina = -halfsina
@@ -3560,9 +3565,9 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
         halfsina = 0.5 * Math.Sin(a)
         aa = a / (right - x + 1)
         daa = Math.PI / (right - x + 1)
-        For ix = midright To right Step 1
+        For ix = midright - 1 To right - 1 Step 1
             Dim d As Double = halfsina / a * (1.0 + Math.Cos(aa))
-            result += z(channel, ix) * d
+            result += y(offset + ix) * d
             a += Math.PI
             aa += daa
             halfsina = -halfsina
@@ -3585,7 +3590,12 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
             Else
                 interp = interpolation
             End If
-            Return NUM_interpolate_sinc(mme.z, ilevel, mme.nx, Sampled_xToIndex(mme, x), interp)
+            Dim ch1(mme.nx - 1) As Double
+            For i As Long = 0 To mme.nx - 1
+                ch1(i) = mme.z(ilevel, i)
+            Next
+
+            Return NUM_interpolate_sinc(ch1, 0, mme.nx, Sampled_xToIndex(mme, x), interp)
         End If
         Dim sum As Double = 0.0
         For channel As Long = 1 To mme.ny Step 1
@@ -3597,7 +3607,11 @@ exitfor1: tleft = Sampled_indexToX(mme, ileft) - 0.5 * mme.dx
             Else
                 interp = interpolation
             End If
-            sum += NUM_interpolate_sinc(mme.z, channel, mme.nx, Sampled_xToIndex(mme, x), interp)
+            Dim ch2(mme.nx - 1) As Double
+            For i As Long = 0 To mme.nx - 1
+                ch2(i) = mme.z(channel, i)
+            Next
+            sum += NUM_interpolate_sinc(ch2, 0, mme.nx, Sampled_xToIndex(mme, x), interp)
         Next
         Return sum / mme.ny
     End Function
