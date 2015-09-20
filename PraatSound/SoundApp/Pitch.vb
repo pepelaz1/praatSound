@@ -15,4 +15,26 @@
             frame(it) = New Pitch_Frame(0)
         Next
     End Sub
+    Function v_convertStandardToSpecialUnit(ByVal value As Double, ByVal ilevel As Long, ByVal unit As Integer) As Double
+        If (ilevel = Pitch_LEVEL_FREQUENCY) Then
+            Return value
+        Else
+            Return NUMundefined
+        End If
+    End Function
+    Overrides Function v_getValueAtSample(ByVal iframe As Long, ByVal ilevel As Long, ByVal unit As Long) As Double
+        Dim f As Double = frame(iframe).candidates(0).frequency
+        If (f <= 0.0 Or f >= ceiling) Then
+            Return NUMundefined
+        End If
+        '// frequency out of range (or NUMundefined)? Voiceless
+        Dim d As Double
+        If ilevel = Pitch_LEVEL_FREQUENCY Then
+            d = f
+        Else
+            d = frame(iframe).candidates(0).strength
+        End If
+        Return v_convertStandardToSpecialUnit(d, ilevel, unit)
+
+    End Function
 End Class

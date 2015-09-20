@@ -18,7 +18,7 @@
         End If
         maxnt = initialMaxnt
         nt = 0
-        t = New Double(maxnt - 1) {}
+        t = New Double(maxnt) {}
     End Sub
 
     Function PointProcess_create(ByVal tmin As Double, ByVal tmax As Double, ByVal initialMaxnt As Long) As PointProcess
@@ -31,12 +31,12 @@
         End Try
     End Function
     Function PointProcess_getLowIndex(ByVal v As Double) As Long
-        If (nt = 0 Or v < t(0)) Then
+        If (nt = 0 Or v < t(1)) Then
             Return 0
         End If
         '/* Special case that often occurs in practice. */
-        If (v >= t(nt - 1)) Then
-            Return (nt - 1)
+        If (v >= t(nt)) Then
+            Return nt
         End If
         '
         '/* May fail if t or my t [1] is NaN. */
@@ -46,7 +46,7 @@
         End If
 
         '/* Start binary search. */
-        Dim left As Long = 1, right = nt - 1
+        Dim left As Long = 1, right = nt
         While (left < right - 1)
             Dim mid As Long = Math.Floor((left + right) / 2)
             If (v >= t(mid)) Then
@@ -74,14 +74,14 @@
                 ReDim Preserve t(2 * maxnt)
                 maxnt = maxnt * 2
             End If
-            If (nt = 0 Or v >= t(nt - 1)) Then
+            If (nt = 0 Or v >= t(nt)) Then
                 '// special case that often occurs in practice
                 nt = nt + 1
                 t(nt) = v
             Else
                 Dim left As Long = PointProcess_getLowIndex(v)
                 If (left = 0 Or t(left) <> v) Then
-                    For i As Long = nt - 1 To left - 1 Step -1
+                    For i As Long = nt To left + 1 Step -1
                         t(i + 1) = t(i)
                     Next
                     nt = nt + 1
