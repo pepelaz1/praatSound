@@ -109,7 +109,7 @@
         Dim p1, p2 As Long
         Dim newValue As Double
         If (randomInited = False) Then
-            NUMrandomRestart(DateTime.UtcNow.Millisecond)
+            NUMrandomRestart(DateTime.Now.Subtract(DateTime.MinValue.AddYears(1969)).TotalMilliseconds)
         End If
         p1 = randomArrayPointer1
         p2 = randomArrayPointer2

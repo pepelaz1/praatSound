@@ -9,7 +9,7 @@
         Try
             Dim point As RealPoint = New RealPoint(t, value)
             Dim curL As Long = points.Length
-            ReDim Preserve points(curL + 1)
+            ReDim Preserve points(curL)
             points(curL) = point
         Catch ex As Exception
             Console.WriteLine(ex.Message)
@@ -17,6 +17,6 @@
         End Try
     End Sub
     Function f_getNumberOfPoints() As Long
-        Return points.Length - 1
+        Return points.Length
     End Function
 End Class

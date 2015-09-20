@@ -82,7 +82,7 @@
         If (mme.points.Length = 0) Then
             Return 0
         End If
-        Dim ileft As Long = 1, iright = mme.points.Length
+        Dim ileft As Long = 0, iright = mme.points.Length - 1
         Dim points() As RealPoint = mme.points
         Dim tleft As Double = points(ileft).number
         '// offleft
@@ -101,38 +101,41 @@
             Console.WriteLine("Execution stopped: iright > ileft")
             Return -1
         End If
-        While (iright > ileft + 1)
-            Dim imid As Long = Convert.ToInt64((ileft + iright) / 2)
+        Dim imid As Long
+        While (iright >= ileft)
+            imid = Convert.ToInt64(ileft + (iright - ileft) / 2)
             Dim tmid As Double = points(imid).number
             If (time < tmid) Then
-                iright = imid
+                iright = imid - 1
                 tright = tmid
-            Else
-                ileft = imid
+            ElseIf (time > tmid) Then
+                ileft = imid + 1
                 tleft = tmid
+            Else
+                GoTo Endofwhile
             End If
         End While
-        If Not (iright = ileft + 1) Then
-            Console.WriteLine("Execution stopped: iright == ileft + 1")
-            Return -1
-        End If
-        If Not (ileft >= 1) Then
-            Console.WriteLine("Execution stopped: ileft >= 1")
-            Return -1
-        End If
-        If Not (iright <= mme.points.Length) Then
-            Console.WriteLine("Execution stopped: (iright <= mme.points.Length)")
-            Return -1
-        End If
-        If Not (time >= points(ileft).number) Then
-            Console.WriteLine("Execution stopped: (time >= points(ileft).number)")
-            Return -1
-        End If
-        If Not (time <= points(iright).number) Then
-            Console.WriteLine("Execution stopped: (time <= points(iright).number)")
-            Return -1
-        End If
-        Return ileft
+        ' If Not (iright = ileft + 1) Then
+        '            Console.WriteLine("Execution stopped: iright == ileft + 1")
+        '            Return -1
+        '        End If
+        '        If Not (ileft >= 0) Then
+        '            Console.WriteLine("Execution stopped: ileft >= 1")
+        '            Return -1
+        '        End If
+        '        If Not (iright <= mme.points.Length) Then
+        '            Console.WriteLine("Execution stopped: (iright <= mme.points.Length)")
+        '            Return -1
+        '        End If
+        '        If Not (time >= points(ileft).number) Then
+        '            Console.WriteLine("Execution stopped: (time >= points(ileft).number)")
+        '            Return -1
+        '        End If
+        '        If Not (time <= points(iright).number) Then
+        '            Console.WriteLine("Execution stopped: (time <= points(iright).number)")
+        '            Return -1
+        '        End If
+Endofwhile: Return imid
     End Function
 
     Function AnyTier_timeToHighIndex(ByVal mme As RealTier, ByVal time As Double) As Long
@@ -140,16 +143,16 @@
         If (mme.points.Length = 0) Then
             Return 0
         End If
-        Dim ileft As Long = 1, iright = mme.points.Length
+        Dim ileft As Long = 0, iright = mme.points.Length - 1
         Dim points() As RealPoint = mme.points
         Dim tleft As Double = points(ileft).number
         If (time <= tleft) Then
-            Return 1
+            Return 0
         End If
         Dim tright As Double = points(iright).number
         ' // offright
         If (time > tright) Then
-            Return iright + 1
+            Return iright
         End If
         If Not (time > tleft And time <= tright) Then
             Console.WriteLine("Execution stopped:time > tleft And time <= tright")
@@ -247,12 +250,12 @@
         If (n = 0) Then
             Return 1.0E+50
         End If
-        Dim pointRight As RealPoint = mme.points(1)
+        Dim pointRight As RealPoint = mme.points(0)
         '/* Constant extrapolation. */
         If (t <= pointRight.number) Then
             Return pointRight.value
         End If
-        Dim pointLeft As RealPoint = mme.points(n)
+        Dim pointLeft As RealPoint = mme.points(n - 1)
         '/* Constant extrapolation. */
         If (t >= pointLeft.number) Then
             Return pointLeft.value
@@ -262,7 +265,7 @@
             Return -1
         End If
         Dim ileft As Long = AnyTier_timeToLowIndex(mme, t), iright = ileft + 1
-        If Not (ileft >= 1 And iright <= n) Then
+        If Not (ileft >= 0 Or iright <= n - 1) Then
             Console.WriteLine("Execution stopped: ileft >= 1 && iright <= n")
             Return -1
         End If
@@ -401,7 +404,7 @@
         Return Convert.ToInt64(Math.Ceiling((x - mme.x1) / mme.dx) + 1)
     End Function
 
-    Function Sound_Point_Pitch_Duration_to_Sound(ByRef mme As Sound, ByVal pulses As PointProcess, ByVal pitch As PitchTier, ByVal duration As DurationTier, ByVal maxT As Double) As Sound
+    Function Sound_Point_Pitch_Duration_to_Sound(ByRef mme As Sound, ByRef pulses As PointProcess, ByRef pitch As PitchTier, ByRef duration As DurationTier, ByVal maxT As Double) As Sound
 
         Dim ipointleft, ipointright As Long
         Dim deltat As Double = 0
@@ -434,6 +437,9 @@
                 ' * Find the beginning of the voice.
                 ' */
                 '/* The first pulse of the voice. */
+                If ipointleft = 321 Then
+                    Dim aaaa As Long = 0
+                End If
                 startOfSourceVoice = pulses.t(ipointleft)
                 startingPeriod = 1.0 / RealTier_getValueAtTime(pitch, startOfSourceVoice)
                 '/* The first pulse is in the middle of a period. */
@@ -3125,7 +3131,7 @@ enofselect: duration = mme.dx * mme.nx
                 maximumCorrelation += 0.5 * dr * dr / d2r
                 ir += dr / d2r
             End If
-            tout = t1 + (ir - ileft1) * mme.dx
+            tout = t1 + (ir - ileft1 + 1) * mme.dx
         End If
         Return maximumCorrelation
     End Function
@@ -3944,8 +3950,8 @@ endofglobalwhile: Return point
     Function Pitch_to_PitchTier(ByRef mme As Pitch) As PitchTier
         Try
             Dim thee As PitchTier = New PitchTier(mme.xmin, mme.xmax)
-            For i As Long = 1 To mme.nx Step 1
-                Dim frequency As Double = mme.frame(i).candidates(1).frequency
+            For i As Long = 0 To mme.nx - 1 Step 1
+                Dim frequency As Double = mme.frame(i).candidates(0).frequency
 
                 '/*
                 ' * Count only voiced frames.
