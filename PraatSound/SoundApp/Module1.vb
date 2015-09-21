@@ -102,17 +102,15 @@
             Return -1
         End If
         Dim imid As Long
-        While (iright >= ileft)
-            imid = Convert.ToInt64(ileft + (iright - ileft) / 2)
+        While (iright > ileft + 1)
+            imid = (ileft + iright) / 2
             Dim tmid As Double = points(imid).number
             If (time < tmid) Then
-                iright = imid - 1
+                iright = imid
                 tright = tmid
-            ElseIf (time > tmid) Then
-                ileft = imid + 1
-                tleft = tmid
             Else
-                GoTo Endofwhile
+                ileft = imid
+                tleft = tmid
             End If
         End While
         ' If Not (iright = ileft + 1) Then
@@ -438,7 +436,7 @@ Endofwhile: Return imid
                 ' */
                 '/* The first pulse of the voice. */
                 If ipointleft = 321 Then
-                    Dim aaaa As Long = 0
+                    Dim aaaa As Long = 359
                 End If
                 startOfSourceVoice = pulses.t(ipointleft)
                 startingPeriod = 1.0 / RealTier_getValueAtTime(pitch, startOfSourceVoice)
@@ -527,6 +525,9 @@ endofswitch:
                         End If
                     Next
                     tsource = 0.5 * (tleft + tright)
+                    If isourcepulse = 360 Then
+                        Dim ttttt As Long = 9
+                    End If
                     period = 1.0 / RealTier_getValueAtTime(pitch, tsource)
                     isourcepulse = PointProcess_getNearestIndex(pulses, tsource)
                     copyBell2(mme, pulses, isourcepulse, period, period, thee, ttarget, maxT)
@@ -734,14 +735,16 @@ endofswitch:
     Sub MelderFile_writeFloatToAudio(ByRef writer As System.IO.BinaryWriter, ByVal numberOfChannels As Integer, ByVal encoding As Integer, ByRef buffer(,) As Double, ByVal numberOfSamples As Long)
         For isamp As Long = 0 To numberOfSamples - 1 Step 1
             For ichan As Long = 0 To numberOfChannels - 1 Step 1
-                Dim value As Long = Math.Round(buffer(ichan, isamp) * 128)
-                If (value < -128) Then
-                    value = -128
+                Dim value As Long = Math.Round(buffer(ichan, isamp) * 32768)
+                If (value < -32768) Then
+                    value = -32768
                 End If
-                If (value > 127) Then
-                    value = 127
+                If (value > 32767) Then
+                    value = 32767
                 End If
-                writer.Write(value)
+                Dim r As Short
+                r = value
+                writer.Write(r)
             Next
         Next
     End Sub
