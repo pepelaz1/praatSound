@@ -37,7 +37,8 @@
         Next
 
         For j = j To 2 * LONG_LAG - 2 Step 1
-            u(j) = ul(j) = 0.0
+            ul(j) = 0.0
+            u(j) = ul(j)
         Next
 
         u(1) += ulp
@@ -67,7 +68,7 @@
                     End If
                 End If
             Next
-            If ((seed & 1) <> 0) Then
+            If ((seed And 1) <> 0) Then
                 For j = LONG_LAG To 1 Step -1
                     ul(j) = ul(j - 1)
                     u(j) = u(j - 1)
@@ -88,7 +89,7 @@
                 t = t - 1
             End If
         End While
-        For j = 0 To SHORT_LAG - 1
+        For j = 0 To SHORT_LAG - 1 Step 1
             randomArray(j + LAG_DIFF) = u(j)
         Next
         For j = j To LONG_LAG - 1 Step 1
@@ -108,8 +109,8 @@
         '*/
         Dim p1, p2 As Long
         Dim newValue As Double
-        If (randomInited = False) Then
-            NUMrandomRestart(DateTime.Now.Subtract(DateTime.MinValue.AddYears(1969)).TotalMilliseconds)
+        If (randomInited = 0) Then
+            NUMrandomRestart(DateTime.Now.Subtract(DateTime.MinValue.AddYears(1969)).TotalSeconds)
         End If
         p1 = randomArrayPointer1
         p2 = randomArrayPointer2

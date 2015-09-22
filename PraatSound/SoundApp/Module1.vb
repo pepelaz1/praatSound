@@ -133,7 +133,7 @@
         '            Console.WriteLine("Execution stopped: (time <= points(iright).number)")
         '            Return -1
         '        End If
-Endofwhile: Return imid
+Endofwhile: Return ileft
     End Function
 
     Function AnyTier_timeToHighIndex(ByVal mme As RealTier, ByVal time As Double) As Long
@@ -303,8 +303,8 @@ Endofwhile: Return imid
         dphase = Math.PI / (imax - imin + 1)
         For i = imin - 1 To imax - 1 Step 1
             Dim iTarget As Long = i + distance
-            If (iTarget >= 1 And iTarget <= thee.nx) Then
-                thee.z(0, iTarget) += mme.z(0, i) * 0.5 * (1 + Math.Cos(dphase * (i - imin + 0.5)))
+            If (iTarget >= 0 And iTarget <= thee.nx - 1) Then
+                thee.z(0, iTarget) += mme.z(0, i) * 0.5 * (1 + Math.Cos(dphase * (i + 1 - imin + 0.5)))
             End If
         Next
     End Sub
@@ -329,8 +329,8 @@ Endofwhile: Return imid
         dphase = Math.PI / (imax - imin + 1)
         For i = imin - 1 To imax - 1 Step 1
             Dim iTarget As Long = i + distance
-            If (iTarget >= 1 And iTarget <= thee.nx) Then
-                thee.z(0, iTarget) += mme.z(0, i) * 0.5 * (1 - Math.Cos(dphase * (i - imin + 0.5)))
+            If (iTarget >= 0 And iTarget <= thee.nx - 1) Then
+                thee.z(0, iTarget) += mme.z(0, i) * 0.5 * (1 - Math.Cos(dphase * (i + 1 - imin + 0.5)))
             End If
         Next
     End Sub
@@ -430,7 +430,8 @@ Endofwhile: Return imid
         ' * Below, I'll abbreviate the voiced interval as "voice" and the voiceless interval as "noise".
         '*/
         If (Not (pitch Is Nothing) AndAlso pitch.points.Length > 0) Then
-            For ipointleft = 1 To pulses.nt
+            ipointleft = 1
+            While ipointleft <= pulses.nt
                 '/*
                 ' * Find the beginning of the voice.
                 ' */
@@ -535,7 +536,8 @@ endofswitch:
                 End While
                 deltat += durationOfTargetVoice - durationOfSourceVoice
                 handledTime = endOfSourceVoice
-            Next
+                ipointleft = ipointright + 1
+            End While
         End If
 
 
