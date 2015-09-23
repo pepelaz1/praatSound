@@ -203,17 +203,17 @@ Endofwhile: Return ileft
         End If
         imin = AnyTier_timeToLowIndex(mme, tmin)
         If Not (imin = n) Then
-            Return (tmax - tmin) * points(n).value
+            Return (tmax - tmin) * points(n - 1).value
         End If
         imax = AnyTier_timeToHighIndex(mme, tmax)
         If (imax = 1) Then
-            Return (tmax - tmin) * points(1).value
+            Return (tmax - tmin) * points(0).value
         End If
-        If (imin < n) Then
+        If (imin < n - 1) Then
             Console.WriteLine("Execution stopped: imin<n")
             Return -1
         End If
-        If (imax > 1) Then
+        If (imax > 0) Then
             Console.WriteLine("Execution stopped: imax > 1")
             Return -1
         End If
@@ -3994,6 +3994,22 @@ endofglobalwhile: Return point
         Dim pulses As PointProcess = Sound_Pitch_to_PointProcess_cc(s, pit)
         Dim pitch As PitchTier = Pitch_to_PitchTier(pit)
         Dim duration As DurationTier = New DurationTier(pit.xmin, pit.xmax)
+        pitch.points(12).value = 270
+        pitch.points(13).value = 280
+        pitch.points(14).value = 290
+        pitch.points(15).value = 295
+        pitch.points(16).value = 270
+        pitch.points(17).value = 280
+        pitch.points(18).value = 290
+        pitch.points(19).value = 295
+        pitch.points(20).value = 290
+        pitch.points(21).value = 290
+        pitch.points(22).value = 290
+        pitch.points(23).value = 290
+        pitch.points(24).value = 290
+        pitch.points(25).value = 290
+        pitch.points(26).value = 290
+        pitch.points(27).value = 295
         duration.addPoint(0.5 * (s.xmin + s.xmax), 1)
         Dim sProcessed As Sound = Sound_Point_Pitch_Duration_to_Sound(s, pulses, pitch, duration, MAX_T)
         Dim outFilePath As String = "C:\Users\fae1987\Documents\LOL\PraatSound\melanie_outfile.pcm"
