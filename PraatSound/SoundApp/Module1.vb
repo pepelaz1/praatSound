@@ -161,7 +161,7 @@ Endofwhile: Return ileft
             Return -1
         End If
         While (iright > ileft + 1)
-            Dim imid As Long = Convert.ToInt64((ileft + iright) / 2)
+            Dim imid As Long = (ileft + iright) / 2
             Dim tmid As Double = points(imid).number
             If (time <= tmid) Then
                 iright = imid
@@ -202,11 +202,11 @@ Endofwhile: Return ileft
             Return (tmax - tmin) * points(0).value
         End If
         imin = AnyTier_timeToLowIndex(mme, tmin)
-        If Not (imin = n) Then
+        If (imin = n - 1) Then
             Return (tmax - tmin) * points(n - 1).value
         End If
         imax = AnyTier_timeToHighIndex(mme, tmax)
-        If (imax = 1) Then
+        If (imax = 0) Then
             Return (tmax - tmin) * points(0).value
         End If
         If (imin < n - 1) Then
@@ -245,7 +245,7 @@ Endofwhile: Return ileft
 
     Function RealTier_getValueAtTime(ByVal mme As RealTier, ByVal t As Double) As Double
         Dim n As Long = mme.points.Length
-        If (n = 0) Then
+        If (n = -1) Then
             Return 1.0E+50
         End If
         Dim pointRight As RealPoint = mme.points(0)
@@ -340,8 +340,8 @@ Endofwhile: Return ileft
         copyFall(mme, tmid, tmid + rightWidth, thee, tmidTarget)
     End Sub
 
-    Sub copyBell2(ByRef mme As Sound, ByRef source As PointProcess, ByVal isource As Double, ByRef leftWidth As Double,
-                   ByRef rightWidth As Double, ByRef thee As Sound, ByVal tmidTarget As Double, ByVal maxT As Double)
+    Sub copyBell2(ByRef mme As Sound, ByRef source As PointProcess, ByVal isource As Double, ByVal leftWidth As Double,
+                   ByVal rightWidth As Double, ByRef thee As Sound, ByVal tmidTarget As Double, ByVal maxT As Double)
         '/*
         '* Replace 'leftWidth' and 'rightWidth' by the lengths of the intervals in the source (instead of target),
         '* if these are shorter.
@@ -367,7 +367,7 @@ Endofwhile: Return ileft
         If (mme.nt = 0) Then
             Return 0
         End If
-        If (t <= mme.t(0)) Then
+        If (t <= mme.t(1)) Then
             Return 1
         End If
         If (t >= mme.t(mme.nt)) Then
@@ -375,7 +375,7 @@ Endofwhile: Return ileft
         End If
 
         '/* Start binary search. */
-        Dim left As Long = 0, right = mme.nt - 1
+        Dim left As Long = 1, right = mme.nt
         While (left < right - 1)
             Dim mid As Long = (left + right) / 2
             If (t >= mme.t(mid)) Then
@@ -3994,22 +3994,9 @@ endofglobalwhile: Return point
         Dim pulses As PointProcess = Sound_Pitch_to_PointProcess_cc(s, pit)
         Dim pitch As PitchTier = Pitch_to_PitchTier(pit)
         Dim duration As DurationTier = New DurationTier(pit.xmin, pit.xmax)
-        pitch.points(12).value = 270
-        pitch.points(13).value = 280
-        pitch.points(14).value = 290
-        pitch.points(15).value = 295
-        pitch.points(16).value = 270
-        pitch.points(17).value = 280
-        pitch.points(18).value = 290
-        pitch.points(19).value = 295
-        pitch.points(20).value = 290
-        pitch.points(21).value = 290
-        pitch.points(22).value = 290
-        pitch.points(23).value = 290
-        pitch.points(24).value = 290
-        pitch.points(25).value = 290
-        pitch.points(26).value = 290
-        pitch.points(27).value = 295
+        For i As Integer = 0 To pitch.points.Count - 1
+            pitch.points(i).value = 100
+        Next
         duration.addPoint(0.5 * (s.xmin + s.xmax), 1)
         Dim sProcessed As Sound = Sound_Point_Pitch_Duration_to_Sound(s, pulses, pitch, duration, MAX_T)
         Dim outFilePath As String = "C:\Users\fae1987\Documents\LOL\PraatSound\melanie_outfile.pcm"
